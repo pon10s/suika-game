@@ -4,6 +4,8 @@
 
 ## 2026-06-11
 
+- **F7完了・公開** 🎉: GitHubリポジトリ pon10s/suika-game を作成(朱音さん承認のうえ公開)。GitHub Actions経由でPagesにデプロイ(.github/workflows/pages.yml — src/ を公開、mainへのpushで自動再デプロイ)。公開URL https://pon10s.github.io/suika-game/ で配信確認。ALLOWED_ORIGINを公開URLに限定し、SECURITY.mdの公開時チェックリスト全項目を実施・完了
+
 - **F6完了**: オンラインランキングをゲームに統合。ranking.js 新規(トークン取得・送信・TOP20取得・textContent描画)、ゲームオーバー画面にニックネーム送信フォーム、「🏆ランキングを見る」ボタン+TOP20モーダル追加。検証:実送信→1位表示OK、悪意あるニックネーム(<img onerror>)がHTML注入されないことを実地確認、0点時はフォーム非表示。テストデータ削除済
 
 - **F5完了**: 朱音さんのアクセストークンを借りてManagement APIでセットアップを実行 — ①schema.sql実行(テーブル+RLS) ②Edge Function submit-score デプロイ(verify_jwt=off) ③Secrets設定(PLAY_TOKEN_SECRET / ALLOWED_ORIGIN=*)。検証:anon読み取りOK・anon直接INSERT拒否(RLS)・不正値4種拒否・正常送信OK・レート制限(60秒3回)発動OK・日本語ニックネーム保存OK。テストデータは削除済み。⚠️F7完了後にアクセストークンをRevokeすること
