@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>スイカゲーム</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="game-wrap">
+    <header class="top">
+      <h1 class="title">スイカゲーム</h1>
+      <div class="hud">
+        <div class="hud-card">
+          <span class="hud-label">スコア</span>
+          <span id="score" class="hud-value">0</span>
+        </div>
+        <div class="hud-card">
+          <span class="hud-label">つぎ</span>
+          <canvas id="next" width="56" height="56"></canvas>
+        </div>
+        <div class="hud-card">
+          <span class="hud-label">ベスト</span>
+          <span id="best" class="hud-value">0</span>
+        </div>
+      </div>
+    </header>
+    <div class="canvas-wrap">
+      <canvas id="game" width="480" height="640"></canvas>
+      <div id="gameover" class="overlay hidden">
+        <div class="overlay-card">
+          <h2>ゲームオーバー</h2>
+          <p class="final-score-label">スコア</p>
+          <p id="final-score" class="final-score">0</p>
+          <div id="submit-area" class="submit-area">
+            <input id="nickname" type="text" maxlength="12" placeholder="ニックネーム(12文字まで)">
+            <button id="submit-score" type="button">ランキングに送信</button>
+            <p id="submit-msg" class="submit-msg"></p>
+          </div>
+          <button id="restart" type="button">もう一度あそぶ</button>
+        </div>
+      </div>
+      <div id="ranking" class="overlay hidden">
+        <div class="overlay-card ranking-card">
+          <h2 class="ranking-title">🏆 ランキング TOP20</h2>
+          <ol id="ranking-list" class="ranking-list"></ol>
+          <button id="close-ranking" type="button">とじる</button>
+        </div>
+      </div>
+    </div>
+    <button id="open-ranking" class="ranking-btn" type="button">🏆 ランキングを見る</button>
+    <section class="evolution">
+      <span class="evo-label">しんかの順番</span>
+      <div id="evo-list" class="evo-list"></div>
+    </section>
+  </main>
+
+  <script src="lib/matter.min.js"></script>
+  <script src="js/fruits.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/ranking.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
