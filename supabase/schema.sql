@@ -7,6 +7,7 @@ create table public.scores (
   nickname text not null check (char_length(nickname) between 1 and 12),
   score integer not null check (score > 0 and score <= 100000),
   ip_hash text, -- レート制限用(IPのハッシュ。生IPは保存しない)
+  shot text,    -- クリア画面の証跡画像(小さい圧縮JPEGのdataURL)
   created_at timestamptz not null default now()
 );
 
@@ -22,6 +23,15 @@ create policy "ranking_read_only"
   to anon
   using (true);
 
--- anon に見せる列を制限(ip_hash は外部に出さない)
+-- anon に見せる列を制限(ip_hash は外部に出さない。shot は表示するので許可)
 revoke select on public.scores from anon;
-grant select (nickname, score, created_at) on public.scores to anon;
+grant select (nickname, score, created_at, shot) on public.scores to anon;
+
+-- ============================================================
+-- 既存DBへの移行(すでに scores テーブルがある場合は、これだけ実行すればOK)
+-- ※新規作成時は上の create で済んでいるので不要
+-- ------------------------------------------------------------
+-- alter table public.scores add column if not exists shot text;
+-- revoke select on public.scores from anon;
+-- grant select (nickname, score, created_at, shot) on public.scores to anon;
+-- ============================================================

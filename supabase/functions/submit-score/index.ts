@@ -17,6 +17,7 @@ const MAX_SCORE_PER_SECOND = 15;   // プレイ1秒あたりに稼げる最大�
 const MIN_PLAY_SECONDS = 10;       // これより短いプレイの送信は拒否
 const RATE_LIMIT_COUNT = 3;        // 同一IPからの送信は…
 const RATE_LIMIT_WINDOW_SEC = 60;  // …60秒に3回まで
+const SHOT_MAX_LEN = 200000;       // 証跡画像(dataURL)の最大長(~150KB相当)。DB肥大とPOST悪用を抑える
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
@@ -76,6 +77,16 @@ Deno.serve(async (req) => {
     return json(400, { error: "invalid nickname" });
   }
 
+  // 2.5 証跡画像(クリア画面)を必須化。JPEG/PNGのbase64 dataURLのみ、サイズ上限あり(脅威2の追加ハードル)
+  //     ※画像はスコアの暗号的な証明ではない(クライアントで生成可能)。素朴な自動POSTのハードル上げ＋人の目での確認用
+  const shot = typeof body.shot === "string" ? body.shot : "";
+  if (shot.length > SHOT_MAX_LEN) {
+    return json(400, { error: "shot too large" });
+  }
+  if (!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(shot)) {
+    return json(400, { error: "invalid shot" });
+  }
+
   // 3. プレイトークン検証:署名と経過時間の整合(脅威2-②)
   const token = typeof body.token === "string" ? body.token : "";
   const [tStr, sig] = token.split(".");
@@ -110,7 +121,7 @@ Deno.serve(async (req) => {
   }
 
   // 5. 保存(service role のみ書き込み可能。RLSは schema.sql 参照)
-  const { error } = await supabase.from("scores").insert({ nickname, score, ip_hash: ipHash });
+  const { error } = await supabase.from("scores").insert({ nickname, score, ip_hash: ipHash, shot });
   if (error) return json(500, { error: "server error" });
 
   return json(200, { ok: true });

@@ -67,7 +67,23 @@ async function refreshPlayToken() {
 }
 refreshPlayToken();
 
+// クリア画面の証跡画像(ゲームオーバーの静止画キャンバスを小さいJPEGにする)
+let lastShot = null;
+function captureShot() {
+  const W = 360, H = 480; // キャンバス(480x640)と同じ3:4で縮小
+  const off = document.createElement("canvas");
+  off.width = W; off.height = H;
+  const octx = off.getContext("2d");
+  // キャンバスは透明背景なので、見た目どおりのクリーム色を下に敷く(JPEGは透明非対応)
+  octx.fillStyle = "#FFF8E7";
+  octx.fillRect(0, 0, W, H);
+  octx.drawImage(canvas, 0, 0, W, H);
+  return off.toDataURL("image/jpeg", 0.62);
+}
+
 game.onGameOver = (score) => {
+  // 震え後・通常の顔で静止した「裏のフルーツたち」をこの瞬間に撮る(0点は送れないので撮らない)
+  lastShot = score > 0 ? captureShot() : null;
   finalScoreEl.textContent = String(score);
   // 送信フォームを初期状態に戻す(0点は送れないので非表示)
   submitMsgEl.textContent = "";
@@ -85,7 +101,7 @@ submitBtn.addEventListener("click", async () => {
   }
   submitBtn.disabled = true;
   submitMsgEl.textContent = "送信中…";
-  const result = await submitScore(playToken, nickname, game.score);
+  const result = await submitScore(playToken, nickname, game.score, lastShot);
   if (result.ok) {
     nicknameEl.disabled = true;
     submitMsgEl.textContent = "送信しました!";
@@ -110,6 +126,11 @@ async function openRanking() {
 document.getElementById("open-ranking").addEventListener("click", openRanking);
 document.getElementById("close-ranking").addEventListener("click", () => {
   rankingEl.classList.add("hidden");
+});
+
+// 証跡画像の拡大表示:どこをタップしても閉じる
+document.getElementById("shot-viewer").addEventListener("click", () => {
+  document.getElementById("shot-viewer").classList.add("hidden");
 });
 
 document.getElementById("restart").addEventListener("click", () => {

@@ -2,6 +2,17 @@
 
 > 新しいものを上に追記する。
 
+## 2026-06-12(⑥ クリア画面の証跡画像をランキングに ※公開サイト未反映/Supabase移行が必要)
+
+- **目的**: 単純な自動POSTでの不正登録のハードルを一段上げる＋人の目で「点数と盤面が釣り合わない記録」に気づけるように。※画像はスコアの暗号的証明ではない(クライアントで生成可能)と SECURITY.md に明記
+- **証跡の中身**: ゲームオーバーの「震え→静止した通常顔のフルーツ」画面をキャンバスから自動キャプチャ(360x480・JPEG q0.62 ≈ 7KB)。ランキングフォームの裏側=普通のOSスクショでは撮れない絵を証跡にする
+- **描画順の調整**(game.js): 震え終了時に先に dead へ切替→通常顔で1フレーム描いてから onGameOver。main.js はその瞬間にキャプチャ(captureShot)
+- **送信/表示**(ranking.js): submitScore に shot を追加。TOP20取得は shot 込みで試し、列が無ければ shot 無しで再取得(=DB移行前に公開しても一覧が壊れない)。一覧にサムネ→タップで拡大(ライトボックス)。画像が無い記録(必須化前の古いデータ)は「NO DATA」プレースホルダー表示
+- **XSS対策**: 表示は `isImageDataUrl()`(`data:image/(jpeg|png);base64,` のみ許可)を通したものだけ img.src に設定。`javascript:` 等は弾く
+- **サーバー検証**(Edge Function): shot を必須化し、形式(jpeg/png base64 dataURL)とサイズ上限(~150KB)を検証して scores.shot に保存
+- **DB**: scores に `shot text` 列を追加＋anonにSELECT許可(schema.sql。既存DB向けの移行SQLも同梱)。⚠️**朱音さんのSupabase操作が必要**(supabase/README.md「追加(証跡画像⑥)」: ①ALTER TABLE ②Edge Function再デプロイ)
+- 検証(クライアント):自動キャプチャ=有効なJPEG dataURL約7KB/遷移時に phase=dead(通常顔)でキャプチャ/サムネ表示・拡大OK/画像なし(移行前データ)も崩れず表示/不正shot(javascript:)を弾く/コンソールエラーなし。※サーバー側のE2EはSupabase移行後に実施
+
 ## 2026-06-11(微調整②:見た目・物理・演出・効果音 ※公開サイト未反映)
 
 - **装飾の前後関係を修正**: 描画を「表面模様(縁取りの下)→縁取り→ヘタ・枝・葉(縁取りの手前)」に再構成(fruits.js: drawSurfaceTexture / drawTopper に分離)。葉や枝が縁に隠れず手前に出るように

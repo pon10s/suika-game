@@ -260,6 +260,15 @@ class Game {
 
   draw() {
     const ctx = this.ctx;
+
+    // 震え演出が終わったら dead へ。描画より先に切り替えることで、このフレームで
+    // 「通常の顔の静止画」を描いてから onGameOver を呼べる(=証跡キャプチャがその絵になる)
+    let justDied = false;
+    if (this.phase === "dying" && Date.now() - this.dyingSince >= GAME.dyingMs) {
+      this.phase = "dead";
+      justDied = true;
+    }
+
     ctx.clearRect(0, 0, GAME.width, GAME.height);
 
     const playing = this.phase === "playing";
@@ -280,11 +289,8 @@ class Game {
 
     this.drawEffects(ctx);
 
-    // 震え演出が終わったらランキング登録画面を出す(裏はこの止まった絵・普通の顔)
-    if (this.phase === "dying" && Date.now() - this.dyingSince >= GAME.dyingMs) {
-      this.phase = "dead";
-      if (this.onGameOver) this.onGameOver(this.score);
-    }
+    // 通常の顔の静止画(=証跡)を描き終えてから通知。main.js はこの瞬間にキャンバスを撮る
+    if (justDied && this.onGameOver) this.onGameOver(this.score);
     requestAnimationFrame(() => this.draw());
   }
 
