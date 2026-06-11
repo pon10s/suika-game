@@ -11,7 +11,8 @@
 - **XSS対策**: 表示は `isImageDataUrl()`(`data:image/(jpeg|png);base64,` のみ許可)を通したものだけ img.src に設定。`javascript:` 等は弾く
 - **サーバー検証**(Edge Function): shot を必須化し、形式(jpeg/png base64 dataURL)とサイズ上限(~150KB)を検証して scores.shot に保存
 - **DB**: scores に `shot text` 列を追加＋anonにSELECT許可(schema.sql。既存DB向けの移行SQLも同梱)。⚠️**朱音さんのSupabase操作が必要**(supabase/README.md「追加(証跡画像⑥)」: ①ALTER TABLE ②Edge Function再デプロイ)
-- 検証(クライアント):自動キャプチャ=有効なJPEG dataURL約7KB/遷移時に phase=dead(通常顔)でキャプチャ/サムネ表示・拡大OK/画像なし(移行前データ)も崩れず表示/不正shot(javascript:)を弾く/コンソールエラーなし。※サーバー側のE2EはSupabase移行後に実施
+- 検証(クライアント):自動キャプチャ=有効なJPEG dataURL約7KB/遷移時に phase=dead(通常顔)でキャプチャ/サムネ表示・拡大OK/画像なし(移行前データ)も崩れず表示/不正shot(javascript:)を弾く/コンソールエラーなし
+- 検証(本番E2E・2026-06-12 Supabase移行後):画像つき正常送信→`{ok:true}`保存/anonでshot列の読戻しOK(grant正常)/画像なし=invalid shot(400)/不正形式=invalid shot(400)/巨大画像=shot too large(400)。テスト行 ZZTEST は朱音さんが削除予定
 
 ## 2026-06-11(微調整②:見た目・物理・演出・効果音 ※公開サイト未反映)
 

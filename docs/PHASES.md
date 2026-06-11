@@ -4,9 +4,9 @@
 
 - **現在フェーズ**: 公開後の改善ラウンド中(F0〜F7は完了済)
 - **公開URL**: https://pon10s.github.io/suika-game/ (リポジトリ: https://github.com/pon10s/suika-game)
-- **直近の作業(ローカルのみ・未push)**: ⑥クリア画面の証跡画像をランキングに(自動キャプチャ→TOP20でサムネ・拡大/サーバー検証/DB列追加)。微調整②(見た目・物理・演出・効果音)は push 済。詳細はCHANGELOG
-- **⚠️ 朱音さんのSupabase操作が必要(⑥)**: ①SQL Editorで `alter table ... add column shot` ＋ grant ②Edge Function `submit-score` を最新版で再デプロイ。手順は supabase/README.md「追加(証跡画像⑥)」。※この移行前に新コードを公開しても一覧は壊れない(shot無しで取得にフォールバック)
-- **次にやること**: ①⑥のクライアントを公開(push) ②朱音さんがSupabase移行 ③移行後にAIが画像つき送信のE2E確認
+- **直近の作業**: ⑥クリア画面の証跡画像をランキングに表示 — **完了・本番E2E検証済**(2026-06-12)。クライアント公開済(push)/Supabase移行済(列追加+grant+Edge Function再デプロイ)/画像つき送信→保存→anon読戻し成功、画像なし・不正形式・巨大画像は拒否を本番で実測
+- **後片付け(朱音さん)**: 検証で入れたテスト行 `ZZTEST`(score 30) を Table Editor → scores から削除してください
+- **次にやること(候補)**: 実機で遊んでの微調整 / 必要なら証跡サムネの大きさ・拡大表示の見た目調整
 - **朱音さん待ちの事項**: 改善の確認 / Supabaseアクセストークン(claude-setup)のRevoke ← まだなら
 - **運用メモ**: main にpushすると自動再デプロイ。script は ?v= でキャッシュ対策済(更新時は番号を上げる)。ローカルだとランキングのみ通信エラー(仕様)
 
