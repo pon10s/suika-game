@@ -90,22 +90,25 @@ const GameAudio = (() => {
     o.start(t); o.stop(t + 0.12);
   }
 
-  // 合体音「ポンっ」:明るくやさしいベル(根音＋5度の倍音)
+  // 合体音「ぽいんっ」:低めでやわらかいサインがクイッと上がってすぐ戻る。
+  // 倍音は1オクターブ上(協和)だけにして不協和感を無くす。
   function merge(level = 0) {
     ensure();
     const t = ctx.currentTime;
-    const base = Math.max(420, 760 - level * 26); // 大きいほど少し低いが明るさは保つ
-    [[base, 0.2], [base * 1.5, 0.13]].forEach(([f, v]) => {
+    const base = Math.max(300, 470 - level * 15); // 全体的に低め。大きい果物ほどさらに低い
+    // [周波数, 音量] 根音＋1オクターブ上(きれいに響く比率)
+    [[base, 0.22], [base * 2, 0.06]].forEach(([f, v]) => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = "sine";
-      o.frequency.setValueAtTime(f, t);
-      o.frequency.exponentialRampToValueAtTime(f * 1.18, t + 0.04);
+      o.frequency.setValueAtTime(f * 0.92, t);
+      o.frequency.linearRampToValueAtTime(f * 1.16, t + 0.05); // クイッと上がって
+      o.frequency.linearRampToValueAtTime(f, t + 0.16);        // すっと戻る=ぽいんっ
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(v, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      g.gain.exponentialRampToValueAtTime(v, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
       o.connect(g); g.connect(sfxGain);
-      o.start(t); o.stop(t + 0.22);
+      o.start(t); o.stop(t + 0.3);
     });
   }
 

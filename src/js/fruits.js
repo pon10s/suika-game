@@ -30,7 +30,8 @@ function shade(hex, f) {
 
 // フルーツを1個描く(イラスト調:ベタ塗り＋太い縁取り＋本体同系色の濃い目口)。
 // ゲーム画面・ネクスト表示・進化リストで共用。drawRadius でミニ表示も可。
-function drawFruitShape(ctx, x, y, fruit, angle = 0, drawRadius = fruit.radius) {
+// opts.eyes === "closed" でゲームオーバー時の「目をつむった顔」になる。
+function drawFruitShape(ctx, x, y, fruit, angle = 0, drawRadius = fruit.radius, opts = {}) {
   const r = drawRadius;
   const outline = shade(fruit.color, 0.34); // 縁取り:本体より濃い同系色
   const ink = shade(fruit.color, 0.48);     // 目・口:さらに濃い同系色
@@ -72,8 +73,8 @@ function drawFruitShape(ctx, x, y, fruit, angle = 0, drawRadius = fruit.radius) 
   ctx.fill();
   ctx.restore();
 
-  // フルーツらしい形・装飾(当たり判定は円のまま、見た目だけ果物に寄せる)
-  drawDecoration(ctx, r, fruit, ink);
+  // 表面の模様(種・網目・斑点など。円の内側=縁取りより下)
+  drawSurfaceTexture(ctx, r, fruit);
 
   // 太い縁取り(本体より濃い同系色)
   ctx.strokeStyle = outline;
@@ -88,20 +89,118 @@ function drawFruitShape(ctx, x, y, fruit, angle = 0, drawRadius = fruit.radius) 
   ctx.arc(-r * 0.4, -r * 0.45, r * 0.1, 0, Math.PI * 2);
   ctx.fill();
 
+  // ヘタ・枝・葉っぱ(縁取りより前に=隠れず手前に出す)
+  drawTopper(ctx, r, fruit);
+
   // 顔(本体同系色の濃い色で)
-  drawFace(ctx, r, fruit.face, ink);
+  drawFace(ctx, r, fruit.face, ink, opts.eyes);
 
   ctx.restore();
 }
 
-// フルーツごとの装飾。本家と同じく「丸い本体の上にフルーツの形を乗せる」方式。
-// 円からはみ出していいのは上部のヘタ・葉・冠だけ(接触しない場所)。横・下は円のまま＋陰影。
-function drawDecoration(ctx, r, fruit, ink) {
-  const STEM = "#7B4F2C";       // 枝(イラスト調で少し濃いめの茶)
-  const STEM_D = "#5C3A1E";     // 枝の縁取り
-  const LEAF = "#5BB85B";
-  const LEAF_D = "#3C8C3C";
+// ---- 装飾の共通ヘルパー ----
+const STEM = "#7B4F2C";       // 枝(イラスト調で少し濃いめの茶)
+const STEM_D = "#5C3A1E";     // 枝の縁取り
+const LEAF = "#5BB85B";
+const LEAF_D = "#3C8C3C";
 
+function _clipBody(ctx, r, draw) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.clip();
+  draw();
+  ctx.restore();
+}
+
+// 表面の模様(円の内側のテクスチャ。縁取りより下に描く)。はみ出すヘタ・枝はここには描かない。
+function drawSurfaceTexture(ctx, r, fruit) {
+  switch (fruit.name) {
+    case "いちご": { // 種のつぶつぶ
+      ctx.fillStyle = "rgba(255, 240, 150, 0.95)";
+      const seeds = [[-0.32, 0.25], [0.32, 0.28], [0, 0.5], [-0.5, 0.46], [0.5, 0.42], [-0.15, 0.02], [0.2, 0.08], [-0.6, 0.1], [0.58, 0.12], [0, 0.7]];
+      for (const [sx, sy] of seeds) {
+        ctx.save();
+        ctx.translate(sx * r, sy * r);
+        ctx.rotate(0.4);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * 0.04, r * 0.075, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      break;
+    }
+    case "ぶどう": { // 房に見えるように粒の輪郭＋ツヤ
+      _clipBody(ctx, r, () => {
+        const lobes = [[-0.45, 0.05], [0.45, 0.05], [-0.28, 0.5], [0.28, 0.5], [0, 0.72], [-0.6, -0.25], [0.6, -0.25], [0, 0.18], [-0.15, -0.55], [0.15, -0.55]];
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
+        ctx.lineWidth = Math.max(1, r * 0.03);
+        for (const [bx, by] of lobes) {
+          ctx.beginPath();
+          ctx.arc(bx * r, by * r, r * 0.3, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+        for (const [bx, by] of lobes) {
+          ctx.beginPath();
+          ctx.arc(bx * r - r * 0.1, by * r - r * 0.12, r * 0.06, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      break;
+    }
+    case "デコポン": { // オレンジ(かき)と区別:そばかす。※口まわり(中央下)には置かない
+      _clipBody(ctx, r, () => {
+        ctx.fillStyle = shade(fruit.color, 0.28);
+        const spots = [[-0.45, -0.2], [0.4, -0.3], [-0.2, 0.1], [-0.55, 0.3], [0.5, 0.2],
+          [0.05, -0.45], [-0.3, 0.5], [0.45, 0.5], [0.3, -0.1], [-0.6, 0.0], [0.6, -0.05]];
+        for (const [dx, dy] of spots) {
+          ctx.beginPath();
+          ctx.arc(dx * r, dy * r, r * 0.035, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      break;
+    }
+    case "なし": { // 皮の斑点(固定位置)
+      _clipBody(ctx, r, () => {
+        ctx.fillStyle = "rgba(120, 90, 40, 0.35)";
+        const dots = [[-0.4, -0.1], [0.35, 0.0], [-0.1, 0.3], [0.2, 0.45], [-0.5, 0.3], [0.5, 0.35], [0.05, -0.2], [-0.25, 0.55], [0.45, -0.3], [-0.6, 0.0], [0.15, 0.65], [-0.3, -0.4]];
+        for (const [dx, dy] of dots) {
+          ctx.beginPath();
+          ctx.arc(dx * r, dy * r, r * 0.025, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      break;
+    }
+    case "パイナップル": { // 網目
+      _clipBody(ctx, r, () => {
+        ctx.strokeStyle = "rgba(150, 110, 0, 0.4)";
+        ctx.lineWidth = Math.max(1, r * 0.03);
+        for (let i = -4; i <= 4; i++) {
+          ctx.beginPath(); ctx.moveTo(-r, i * r * 0.35 - r); ctx.lineTo(r, i * r * 0.35); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-r, i * r * 0.35 + r); ctx.lineTo(r, i * r * 0.35); ctx.stroke();
+        }
+      });
+      break;
+    }
+    case "メロン": { // 網目模様
+      _clipBody(ctx, r, () => {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+        ctx.lineWidth = Math.max(1, r * 0.022);
+        for (let i = -4; i <= 4; i++) {
+          ctx.beginPath(); ctx.moveTo(-r, i * r * 0.32 - r * 0.2); ctx.lineTo(r, i * r * 0.32 + r * 0.2); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-r, i * r * 0.32 + r * 0.2); ctx.lineTo(r, i * r * 0.32 - r * 0.2); ctx.stroke();
+        }
+      });
+      break;
+    }
+  }
+}
+
+// ヘタ・枝・葉っぱ・冠(縁取りより前=手前に出す。隠れない)。
+function drawTopper(ctx, r, fruit) {
   // 太めの枝(縁取りつきでイラストっぽく)
   const stem = (len = 0.3, w = 0.12) => {
     ctx.lineCap = "round";
@@ -133,28 +232,6 @@ function drawDecoration(ctx, r, fruit, ink) {
     ctx.restore();
   };
 
-  const clipBody = (draw) => {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.clip();
-    draw();
-    ctx.restore();
-  };
-
-  // 上部のくぼみ(りんご・なし):中心上を暗く落として凹みを表現
-  const topDimple = () => {
-    clipBody(() => {
-      const d = ctx.createRadialGradient(0, -r * 0.9, r * 0.04, 0, -r * 0.9, r * 0.55);
-      d.addColorStop(0, "rgba(0,0,0,0.30)");
-      d.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = d;
-      ctx.beginPath();
-      ctx.arc(0, -r * 0.65, r * 0.55, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  };
-
   switch (fruit.name) {
     case "さくらんぼ": { // 長くてカーブした太い茎(縁取りつき)
       ctx.lineCap = "round";
@@ -172,7 +249,7 @@ function drawDecoration(ctx, r, fruit, ink) {
       ctx.stroke();
       break;
     }
-    case "いちご": { // 上の緑ヘタ(5枚)+ 種のつぶつぶ
+    case "いちご": { // 上の緑ヘタ(5枚)+ 小さな茎
       ctx.fillStyle = LEAF;
       for (let i = -2; i <= 2; i++) {
         ctx.save();
@@ -187,106 +264,60 @@ function drawDecoration(ctx, r, fruit, ink) {
         ctx.restore();
       }
       stem(0.16, 0.06);
-      ctx.fillStyle = "rgba(255, 240, 150, 0.95)";
-      const seeds = [[-0.32, 0.25], [0.32, 0.28], [0, 0.5], [-0.5, 0.46], [0.5, 0.42], [-0.15, 0.02], [0.2, 0.08], [-0.6, 0.1], [0.58, 0.12], [0, 0.7]];
-      for (const [sx, sy] of seeds) {
-        ctx.save();
-        ctx.translate(sx * r, sy * r);
-        ctx.rotate(0.4);
-        ctx.beginPath();
-        ctx.ellipse(0, 0, r * 0.04, r * 0.075, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
       break;
     }
-    case "ぶどう": { // 房に見えるように粒の輪郭＋ツヤを重ねる
+    case "ぶどう": {
       stem(0.28, 0.08);
       leaf(1, 0.18, 1.12, 0.2);
-      clipBody(() => {
-        const lobes = [[-0.45, 0.05], [0.45, 0.05], [-0.28, 0.5], [0.28, 0.5], [0, 0.72], [-0.6, -0.25], [0.6, -0.25], [0, 0.18], [-0.15, -0.55], [0.15, -0.55]];
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
-        ctx.lineWidth = Math.max(1, r * 0.03);
-        for (const [bx, by] of lobes) {
-          ctx.beginPath();
-          ctx.arc(bx * r, by * r, r * 0.3, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
-        for (const [bx, by] of lobes) {
-          ctx.beginPath();
-          ctx.arc(bx * r - r * 0.1, by * r - r * 0.12, r * 0.06, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
       break;
     }
-    case "デコポン": { // オレンジ(かき)と区別:そばかすみたいなぼつぼつ
-      clipBody(() => {
-        ctx.fillStyle = shade(fruit.color, 0.28);
-        const spots = [[-0.45, -0.2], [0.4, -0.3], [-0.2, 0.1], [0.15, 0.25], [-0.55, 0.3], [0.5, 0.2],
-          [0.05, -0.45], [-0.3, 0.5], [0.45, 0.5], [-0.1, 0.55], [0.3, -0.1], [-0.6, 0.0], [0.6, -0.05], [0.2, 0.55]];
-        for (const [dx, dy] of spots) {
-          ctx.beginPath();
-          ctx.arc(dx * r, dy * r, r * 0.035, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
-      break;
-    }
-    case "かき": { // 4枚の緑ヘタ(柿の特徴)
-      ctx.fillStyle = LEAF_D;
-      for (let i = 0; i < 4; i++) {
+    case "かき": { // 柿のヘタ(がく):上に横へ広がる4枚のがく。星形に開く
+      ctx.save();
+      ctx.translate(0, -r * 0.72); // がくの中心(果実の上)
+      ctx.fillStyle = LEAF;
+      ctx.strokeStyle = LEAF_D;
+      ctx.lineWidth = Math.max(1, r * 0.03);
+      // +x方向に伸びる短く幅広のがく1枚。angで向きを変える
+      const sepal = (ang) => {
         ctx.save();
-        ctx.rotate(i * Math.PI / 2);
+        ctx.rotate(ang);
+        const len = r * 0.5, w = r * 0.17;
         ctx.beginPath();
-        ctx.moveTo(0, -r * 0.78);
-        ctx.quadraticCurveTo(-r * 0.3, -r * 0.95, 0, -r * 1.06);
-        ctx.quadraticCurveTo(r * 0.3, -r * 0.95, 0, -r * 0.78);
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(len * 0.5, -w, len, 0);
+        ctx.quadraticCurveTo(len * 0.5, w, 0, 0);
+        ctx.closePath();
         ctx.fill();
+        ctx.stroke();
         ctx.restore();
-      }
-      ctx.fillStyle = STEM;
+      };
+      // 上方向(-PI/2)を中心に左右へ広げた4枚
+      [-Math.PI * 0.92, -Math.PI * 0.64, -Math.PI * 0.36, -Math.PI * 0.08].forEach(sepal);
+      // 中心をなめらかにつなぐ小さな緑(茶色の点は付けない)
+      ctx.fillStyle = LEAF_D;
       ctx.beginPath();
-      ctx.arc(0, -r * 0.9, r * 0.06, 0, Math.PI * 2);
+      ctx.arc(0, 0, r * 0.1, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
       break;
     }
-    case "りんご": { // 上のくぼみ + 茎 + 葉
-      topDimple();
+    case "りんご": { // 茎 + 葉(付け根の影は入れない)
       stem(0.32, 0.07);
       leaf(1, 0.16, 1.12, 0.18);
       break;
     }
-    case "なし": { // 上のくぼみ + 皮の斑点(固定位置)
-      topDimple();
+    case "なし": { // 茎のみ(付け根の影は入れない)
       stem(0.26, 0.06);
-      clipBody(() => {
-        ctx.fillStyle = "rgba(120, 90, 40, 0.35)";
-        const dots = [[-0.4, -0.1], [0.35, 0.0], [-0.1, 0.3], [0.2, 0.45], [-0.5, 0.3], [0.5, 0.35], [0.05, -0.2], [-0.25, 0.55], [0.45, -0.3], [-0.6, 0.0], [0.15, 0.65], [-0.3, -0.4]];
-        for (const [dx, dy] of dots) {
-          ctx.beginPath();
-          ctx.arc(dx * r, dy * r, r * 0.025, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
       break;
     }
-    case "もも": { // 縦の割れ目(桃のすじ)+ 葉
-      clipBody(() => {
-        ctx.strokeStyle = "rgba(0,0,0,0.14)";
-        ctx.lineWidth = Math.max(1, r * 0.04);
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(0, -r * 0.95);
-        ctx.quadraticCurveTo(r * 0.12, 0, 0, r * 0.95);
-        ctx.stroke();
-      });
+    case "もも": { // 葉のみ(縦すじは無し)
       leaf(1, 0.1, 1.0, 0.22);
       break;
     }
-    case "パイナップル": { // 上にトゲトゲの冠 + 網目
-      ctx.fillStyle = LEAF_D;
+    case "パイナップル": { // 上にトゲトゲの冠
+      ctx.fillStyle = LEAF;
+      ctx.strokeStyle = LEAF_D;
+      ctx.lineWidth = Math.max(1, r * 0.03);
       for (let i = -2; i <= 2; i++) {
         ctx.save();
         ctx.translate(0, -r * 0.82);
@@ -297,27 +328,12 @@ function drawDecoration(ctx, r, fruit, ink) {
         ctx.lineTo(r * 0.1, -r * 0.6);
         ctx.closePath();
         ctx.fill();
+        ctx.stroke();
         ctx.restore();
       }
-      clipBody(() => {
-        ctx.strokeStyle = "rgba(150, 110, 0, 0.4)";
-        ctx.lineWidth = Math.max(1, r * 0.03);
-        for (let i = -4; i <= 4; i++) {
-          ctx.beginPath(); ctx.moveTo(-r, i * r * 0.35 - r); ctx.lineTo(r, i * r * 0.35); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(-r, i * r * 0.35 + r); ctx.lineTo(r, i * r * 0.35); ctx.stroke();
-        }
-      });
       break;
     }
-    case "メロン": { // 網目模様 + T字のヘタ
-      clipBody(() => {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-        ctx.lineWidth = Math.max(1, r * 0.022);
-        for (let i = -4; i <= 4; i++) {
-          ctx.beginPath(); ctx.moveTo(-r, i * r * 0.32 - r * 0.2); ctx.lineTo(r, i * r * 0.32 + r * 0.2); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(-r, i * r * 0.32 + r * 0.2); ctx.lineTo(r, i * r * 0.32 - r * 0.2); ctx.stroke();
-        }
-      });
+    case "メロン": { // T字のヘタ
       ctx.strokeStyle = LEAF_D;
       ctx.lineWidth = Math.max(1, r * 0.08);
       ctx.lineCap = "round";
@@ -331,6 +347,8 @@ function drawDecoration(ctx, r, fruit, ink) {
       stem(0.22, 0.07);
       leaf(1, 0.18, 1.05, 0.18);
       break;
+    case "デコポン": // ヘタ無し(そばかすのみ)
+      break;
     default:
       stem(0.26, 0.07);
       leaf(1, 0.18, 1.05, 0.18);
@@ -339,7 +357,7 @@ function drawDecoration(ctx, r, fruit, ink) {
 
 // 顔:「絶対に死なんハムスター」風。手書きっぽいシンプル顔。色は本体の濃い同系色(ink)。
 // 目・口ともにバリエーション多め。
-function drawFace(ctx, r, face, ink = "#4a3a30") {
+function drawFace(ctx, r, face, ink = "#4a3a30", eyesOverride = null) {
   const eyeX = r * 0.28;
   const eyeY = -r * 0.02;
   const eyeR = Math.max(1.1, r * 0.078);
@@ -348,6 +366,27 @@ function drawFace(ctx, r, face, ink = "#4a3a30") {
   ctx.lineJoin = "round";
   ctx.fillStyle = ink;
   ctx.strokeStyle = ink;
+
+  // ゲームオーバー時:目をつむった顔(困り眉＋小さな口)
+  if (eyesOverride === "closed") {
+    ctx.strokeStyle = ink; ctx.lineWidth = lw;
+    for (const sx of [-eyeX, eyeX]) {
+      ctx.beginPath();
+      ctx.arc(sx, eyeY - eyeR * 0.4, eyeR * 1.2, Math.PI * 0.12, Math.PI * 0.88); // ‿ 閉じた目
+      ctx.stroke();
+    }
+    // 小さな「>_<」っぽい口
+    ctx.lineWidth = Math.max(1, r * 0.045);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.1, r * 0.2);
+    ctx.quadraticCurveTo(0, r * 0.28, r * 0.1, r * 0.2);
+    ctx.stroke();
+    // ほっぺ
+    ctx.fillStyle = "rgba(255, 150, 160, 0.4)";
+    ctx.beginPath(); ctx.arc(-r * 0.52, r * 0.2, r * 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(r * 0.52, r * 0.2, r * 0.1, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
 
   // --- 目のバリエーション ---
   const dot = (x, dx = 0) => { ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(x + dx, eyeY, eyeR, 0, Math.PI * 2); ctx.fill(); };
