@@ -7,7 +7,7 @@
 body {
   background: #FFF8E7;
   color: #5D4037;
-  font-family: "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  font-family: "Yomogi", "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
   display: flex;
   justify-content: center;
   min-height: 100vh;
@@ -40,8 +40,124 @@ body {
 }
 
 .title {
-  font-size: 20px;
+  font-family: "Hachi Maru Pop", "Yomogi", sans-serif;
+  font-size: 27px;
   color: #2E7D32;
+  -webkit-text-stroke: 0.8px #2E7D32; /* 文字を太く */
+  text-shadow: 2px 2px 0 #fff, 3px 3px 0 rgba(46, 125, 50, 0.18);
+  letter-spacing: 1px;
+}
+
+.title-sub {
+  display: inline-block;
+  font-size: 15px;
+  color: #E53935;
+  text-shadow: 1px 1px 0 #fff;
+  -webkit-text-stroke: 0;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* 手書き風フォントを数字・ボタン・見出しにも効かせる(text-strokeで太く) */
+.hud-value,
+.ranking-btn,
+.ranking-title,
+.final-score,
+.hud-label,
+.title-sub,
+#restart,
+#submit-score,
+#close-ranking,
+#nickname {
+  font-family: "Hachi Maru Pop", "Yomogi", sans-serif;
+}
+
+.hud-value {
+  -webkit-text-stroke: 0.6px currentColor;
+}
+
+.ranking-btn,
+.ranking-title,
+.final-score,
+#restart,
+#close-ranking,
+#submit-score {
+  -webkit-text-stroke: 0.4px currentColor;
+}
+
+/* 右上のアイコンボタン(やりなおす) */
+.icon-btn {
+  align-self: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  color: #2E7D32;
+  box-shadow: 0 2px 4px rgba(93, 64, 55, 0.18);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.icon-btn:hover {
+  background: #F1F8E9;
+}
+
+.icon-btn:active {
+  transform: translateY(1px);
+}
+
+/* ランキングボタン内のSVGアイコン */
+.ranking-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ranking-btn svg {
+  color: #D4A017;
+}
+
+/* サウンドのトグル(BGM/効果音) */
+.sound-toggle {
+  gap: 5px;
+  padding: 8px 12px;
+}
+
+.sound-toggle svg {
+  color: #2E7D32;
+}
+
+.sound-toggle.off {
+  color: #B0A89C;
+  background: #F1ECE2;
+}
+
+.sound-toggle.off svg {
+  color: #B0A89C;
+}
+
+/* OFFのとき斜線を重ねる */
+.sound-toggle.off::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 2px;
+  background: #B0A89C;
+  transform: rotate(-12deg);
+}
+
+.sound-toggle {
+  position: relative;
 }
 
 #next {
@@ -52,12 +168,13 @@ body {
 .hud-card {
   background: #fff;
   border-radius: 12px;
-  padding: 6px 14px;
+  padding: 6px 8px;
   box-shadow: 0 2px 4px rgba(93, 64, 55, 0.15);
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 80px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .hud-label {
@@ -67,7 +184,6 @@ body {
 
 .hud-value {
   font-size: 20px;
-  font-weight: bold;
 }
 
 .canvas-wrap {

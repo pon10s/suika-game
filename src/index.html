@@ -3,14 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>スイカゲーム</title>
-  <link rel="stylesheet" href="css/style.css">
+  <title>スイカゲーム（パチモン）</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Yomogi&family=Hachi+Maru+Pop&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
   <main class="game-wrap">
     <header class="top">
-      <h1 class="title">スイカゲーム</h1>
+      <h1 class="title">スイカゲーム<span class="title-sub">（パチモン）</span></h1>
       <div class="hud">
+        <div class="hud-card">
+          <span class="hud-label">ベスト</span>
+          <span id="best" class="hud-value">0</span>
+        </div>
         <div class="hud-card">
           <span class="hud-label">スコア</span>
           <span id="score" class="hud-value">0</span>
@@ -19,10 +26,12 @@
           <span class="hud-label">つぎ</span>
           <canvas id="next" width="56" height="56"></canvas>
         </div>
-        <div class="hud-card">
-          <span class="hud-label">ベスト</span>
-          <span id="best" class="hud-value">0</span>
-        </div>
+        <button id="reset-btn" class="icon-btn" type="button" title="やりなおす" aria-label="やりなおす">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+              d="M19 12a7 7 0 1 1-2.05-4.95M19 4v4h-4"/>
+          </svg>
+        </button>
       </div>
     </header>
     <div class="canvas-wrap">
@@ -48,7 +57,30 @@
         </div>
       </div>
     </div>
-    <button id="open-ranking" class="ranking-btn" type="button">🏆 ランキングを見る</button>
+    <div class="btn-row">
+      <button id="bgm-btn" class="ranking-btn sound-toggle" type="button" aria-label="BGM切り替え">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="currentColor" d="M9 17V5l10-2v12"/>
+          <circle cx="6.5" cy="17.5" r="2.6" fill="currentColor"/>
+          <circle cx="16.5" cy="14.5" r="2.6" fill="currentColor"/>
+        </svg>
+        <span>BGM</span>
+      </button>
+      <button id="sfx-btn" class="ranking-btn sound-toggle" type="button" aria-label="効果音切り替え">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4z"/>
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 8.5a4 4 0 0 1 0 7"/>
+        </svg>
+        <span>効果音</span>
+      </button>
+      <button id="open-ranking" class="ranking-btn" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path fill="currentColor" d="M6 3h12v2h3v3a4 4 0 0 1-4.2 4 6 6 0 0 1-2.8 2.6V17h3v2H9v-2h3v-2.4A6 6 0 0 1 9.2 12 4 4 0 0 1 5 8V5h1V3zm12 4v1a2 2 0 0 0 1.9-2H18v1zM6 7v1a2 2 0 0 0 1.9 1H6V7z"/>
+          <path fill="currentColor" d="M8 19h8v2H8z"/>
+        </svg>
+        ランキング
+      </button>
+    </div>
     <section class="evolution">
       <span class="evo-label">しんかの順番</span>
       <div id="evo-list" class="evo-list"></div>
@@ -56,11 +88,12 @@
   </main>
 
   <script src="lib/matter.min.js"></script>
-  <script src="js/fruits.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/ranking.js"></script>
-  <script src="js/game.js"></script>
-  <script src="js/main.js"></script>
+  <script src="js/fruits.js?v=5"></script>
+  <script src="js/storage.js?v=5"></script>
+  <script src="js/config.js?v=5"></script>
+  <script src="js/ranking.js?v=5"></script>
+  <script src="js/audio.js?v=5"></script>
+  <script src="js/game.js?v=5"></script>
+  <script src="js/main.js?v=5"></script>
 </body>
 </html>

@@ -118,6 +118,35 @@ document.getElementById("restart").addEventListener("click", () => {
   refreshPlayToken();
 });
 
+// プレイ中のやりなおし(確認ダイアログつき)
+document.getElementById("reset-btn").addEventListener("click", () => {
+  if (game.score > 0 && !window.confirm("いまのゲームをやりなおしますか?")) return;
+  gameoverEl.classList.add("hidden");
+  game.restart();
+  refreshPlayToken();
+});
+
+// サウンド:最初の操作でBGM開始(ブラウザの自動再生制限のため)
+function startAudioOnce() {
+  GameAudio.start();
+  window.removeEventListener("pointerdown", startAudioOnce);
+  window.removeEventListener("keydown", startAudioOnce);
+}
+window.addEventListener("pointerdown", startAudioOnce);
+window.addEventListener("keydown", startAudioOnce);
+
+// サウンドON/OFFボタン(BGMと効果音を別々に)
+const bgmBtn = document.getElementById("bgm-btn");
+const sfxBtn = document.getElementById("sfx-btn");
+bgmBtn.addEventListener("click", () => {
+  GameAudio.start();
+  bgmBtn.classList.toggle("off", !GameAudio.toggleBgm());
+});
+sfxBtn.addEventListener("click", () => {
+  GameAudio.start();
+  sfxBtn.classList.toggle("off", !GameAudio.toggleSfx());
+});
+
 // 画面上の座標 → キャンバス内部座標(CSSで拡縮されるため変換が必要)
 function toCanvasX(clientX) {
   const rect = canvas.getBoundingClientRect();
