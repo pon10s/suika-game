@@ -74,8 +74,8 @@ function captureShot() {
   const off = document.createElement("canvas");
   off.width = W; off.height = H;
   const octx = off.getContext("2d");
-  // キャンバスは透明背景なので、見た目どおりのクリーム色を下に敷く(JPEGは透明非対応)
-  octx.fillStyle = "#FFF8E7";
+  // キャンバスは透明背景なので、背景に近い色を下に敷く(JPEGは透明非対応)
+  octx.fillStyle = "#ecd5b0";
   octx.fillRect(0, 0, W, H);
   octx.drawImage(canvas, 0, 0, W, H);
   return off.toDataURL("image/jpeg", 0.62);
@@ -132,6 +132,7 @@ document.getElementById("close-ranking").addEventListener("click", () => {
 document.getElementById("shot-viewer").addEventListener("click", () => {
   document.getElementById("shot-viewer").classList.add("hidden");
 });
+
 
 document.getElementById("restart").addEventListener("click", () => {
   gameoverEl.classList.add("hidden");

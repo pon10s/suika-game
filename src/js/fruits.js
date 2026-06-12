@@ -5,7 +5,7 @@
 const FRUITS = [
   { name: "さくらんぼ",   radius: 16,  color: "#F23B3B", score: 0,  face: "laugh" },
   { name: "いちご",       radius: 24,  color: "#FF5160", score: 1,  face: "shy" },
-  { name: "ぶどう",       radius: 32,  color: "#A436D6", score: 3,  face: "wink" },
+  { name: "ぶどう",       radius: 32,  color: "#B45CDB", score: 3,  face: "wink" },
   { name: "デコポン",     radius: 40,  color: "#FFA21F", score: 6,  face: "deko" },
   { name: "かき",         radius: 50,  color: "#FF7A1A", score: 10, face: "relaxed" },
   { name: "りんご",       radius: 60,  color: "#F5283C", score: 15, face: "smile" },
@@ -39,55 +39,62 @@ function drawFruitShape(ctx, x, y, fruit, angle = 0, drawRadius = fruit.radius, 
   ctx.translate(x, y);
   ctx.rotate(angle);
 
-  // 本体(ベタ塗りの円 → フルーツ同士に隙間ができない)
-  ctx.fillStyle = fruit.color;
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fill();
+  // 当たり判定は円のまま。いちご・ぶどうは見た目だけ別の形にする(隙間/重なりは許容)
+  if (fruit.name === "いちご") {
+    drawStrawberryBody(ctx, r, fruit, outline);
+  } else if (fruit.name === "ぶどう") {
+    drawGrapeBody(ctx, r, fruit, outline);
+  } else {
+    // 本体(ベタ塗りの円 → フルーツ同士に隙間ができない)
+    ctx.fillStyle = fruit.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
 
-  // スイカだけ縦縞(docs/DESIGN.md)
-  if (fruit.name === "スイカ") {
+    // スイカだけ縦縞(docs/DESIGN.md)
+    if (fruit.name === "スイカ") {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.strokeStyle = "#1B5E20";
+      ctx.lineWidth = r * 0.16;
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * r * 0.42, -r);
+        ctx.lineTo(i * r * 0.42, r);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // イラスト調のやわらかい光(上側だけ・影は付けない=フラットで漫画っぽく)
     ctx.save();
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.clip();
-    ctx.strokeStyle = "#1B5E20";
-    ctx.lineWidth = r * 0.16;
-    for (let i = -2; i <= 2; i++) {
-      ctx.beginPath();
-      ctx.moveTo(i * r * 0.42, -r);
-      ctx.lineTo(i * r * 0.42, r);
-      ctx.stroke();
-    }
+    ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.22, -r * 0.32, r * 0.72, r * 0.5, -0.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
+
+    // 表面の模様(種・網目・斑点など。円の内側=縁取りより下)
+    drawSurfaceTexture(ctx, r, fruit);
+
+    // 太い縁取り(本体より濃い同系色)
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = Math.max(2, r * 0.085);
+    ctx.beginPath();
+    ctx.arc(0, 0, r - r * 0.03, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 小さな反射ハイライト
+    ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
+    ctx.beginPath();
+    ctx.arc(-r * 0.4, -r * 0.45, r * 0.1, 0, Math.PI * 2);
+    ctx.fill();
   }
-
-  // イラスト調のやわらかい光(上側だけ・影は付けない=フラットで漫画っぽく)
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
-  ctx.beginPath();
-  ctx.ellipse(-r * 0.22, -r * 0.32, r * 0.72, r * 0.5, -0.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  // 表面の模様(種・網目・斑点など。円の内側=縁取りより下)
-  drawSurfaceTexture(ctx, r, fruit);
-
-  // 太い縁取り(本体より濃い同系色)
-  ctx.strokeStyle = outline;
-  ctx.lineWidth = Math.max(2, r * 0.085);
-  ctx.beginPath();
-  ctx.arc(0, 0, r - r * 0.03, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // 小さな反射ハイライト
-  ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
-  ctx.beginPath();
-  ctx.arc(-r * 0.4, -r * 0.45, r * 0.1, 0, Math.PI * 2);
-  ctx.fill();
 
   // ヘタ・枝・葉っぱ(縁取りより前に=隠れず手前に出す)
   drawTopper(ctx, r, fruit);
@@ -113,42 +120,83 @@ function _clipBody(ctx, r, draw) {
   ctx.restore();
 }
 
+// いちご:丸みのある三角(下が尖る)。当たり判定は円のまま、見た目だけ三角に。
+function drawStrawberryBody(ctx, r, fruit, outline) {
+  const trace = () => {
+    ctx.beginPath();
+    ctx.moveTo(0, r * 0.98);
+    ctx.bezierCurveTo(-r * 0.98, r * 0.55, -r * 1.02, -r * 0.18, -r * 0.52, -r * 0.5);
+    ctx.bezierCurveTo(-r * 0.22, -r * 0.68, r * 0.22, -r * 0.68, r * 0.52, -r * 0.5);
+    ctx.bezierCurveTo(r * 1.02, -r * 0.18, r * 0.98, r * 0.55, 0, r * 0.98);
+    ctx.closePath();
+  };
+  ctx.fillStyle = fruit.color;
+  trace();
+  ctx.fill();
+  ctx.save();
+  trace();
+  ctx.clip();
+  // やわらかい光
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.2, -r * 0.18, r * 0.5, r * 0.4, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  // 種のつぶつぶ(三角の中に収まる位置)
+  ctx.fillStyle = "rgba(255,240,150,0.95)";
+  const seeds = [[-0.32, 0.0], [0.3, 0.04], [0, 0.22], [-0.5, 0.28], [0.48, 0.3],
+    [-0.2, 0.46], [0.22, 0.46], [0, 0.66], [-0.34, 0.58], [0.34, 0.58], [-0.12, 0.8], [0.14, 0.8]];
+  for (const [sx, sy] of seeds) {
+    ctx.save();
+    ctx.translate(sx * r, sy * r);
+    ctx.rotate(0.35);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.045, r * 0.08, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+  // 縁取り
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = Math.max(2, r * 0.085);
+  trace();
+  ctx.stroke();
+  // ハイライト
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.beginPath();
+  ctx.arc(-r * 0.34, -r * 0.34, r * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ぶどう:円(粒)をはっきり重ねた逆三角形の房。色は均一(他の果物と同じフラットなテイスト)。
+// 当たり判定は円のまま。粒の縁取りは外周だけ残す(ストローク→塗りつぶしで内側の線を隠す)。
+function drawGrapeBody(ctx, r, fruit, outline) {
+  const gr = r * 0.4;
+  // 上が広く下が尖る逆三角形(3-2-1)。円をしっかり重ねる
+  const grapes = [
+    [-0.46, -0.4], [0.0, -0.5], [0.46, -0.4], // 上段(広い)
+    [-0.24, -0.06], [0.24, -0.06],            // 中段
+    [0.0, 0.34],                              // 下段(尖り)
+  ];
+  // 1) 全粒に太い縁取りをストローク → このあと塗りで内側を隠す=外周だけ縁取りが残る
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = Math.max(2.5, r * 0.12);
+  for (const [gx, gy] of grapes) { ctx.beginPath(); ctx.arc(gx * r, gy * r, gr, 0, Math.PI * 2); ctx.stroke(); }
+  // 2) 均一な単色で塗り(フラット)。手前(下)の粒を後に塗って重なりを自然に
+  ctx.fillStyle = fruit.color;
+  for (const [gx, gy] of grapes) { ctx.beginPath(); ctx.arc(gx * r, gy * r, gr, 0, Math.PI * 2); ctx.fill(); }
+  // 3) 粒の境目(円弧を重ねた感じ)=各粒の下側の弧を薄い同系色で
+  ctx.strokeStyle = shade(fruit.color, 0.13);
+  ctx.lineWidth = Math.max(1, r * 0.04);
+  for (const [gx, gy] of grapes) { ctx.beginPath(); ctx.arc(gx * r, gy * r, gr * 0.94, Math.PI * 0.12, Math.PI * 0.88); ctx.stroke(); }
+  // 4) 各粒に同じ位置の小さなツヤ(均一なテイスト)
+  ctx.fillStyle = "rgba(255,255,255,0.4)";
+  for (const [gx, gy] of grapes) { ctx.beginPath(); ctx.arc(gx * r - gr * 0.32, gy * r - gr * 0.34, gr * 0.2, 0, Math.PI * 2); ctx.fill(); }
+}
+
 // 表面の模様(円の内側のテクスチャ。縁取りより下に描く)。はみ出すヘタ・枝はここには描かない。
 function drawSurfaceTexture(ctx, r, fruit) {
   switch (fruit.name) {
-    case "いちご": { // 種のつぶつぶ
-      ctx.fillStyle = "rgba(255, 240, 150, 0.95)";
-      const seeds = [[-0.32, 0.25], [0.32, 0.28], [0, 0.5], [-0.5, 0.46], [0.5, 0.42], [-0.15, 0.02], [0.2, 0.08], [-0.6, 0.1], [0.58, 0.12], [0, 0.7]];
-      for (const [sx, sy] of seeds) {
-        ctx.save();
-        ctx.translate(sx * r, sy * r);
-        ctx.rotate(0.4);
-        ctx.beginPath();
-        ctx.ellipse(0, 0, r * 0.04, r * 0.075, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-      break;
-    }
-    case "ぶどう": { // 房に見えるように粒の輪郭＋ツヤ
-      _clipBody(ctx, r, () => {
-        const lobes = [[-0.45, 0.05], [0.45, 0.05], [-0.28, 0.5], [0.28, 0.5], [0, 0.72], [-0.6, -0.25], [0.6, -0.25], [0, 0.18], [-0.15, -0.55], [0.15, -0.55]];
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
-        ctx.lineWidth = Math.max(1, r * 0.03);
-        for (const [bx, by] of lobes) {
-          ctx.beginPath();
-          ctx.arc(bx * r, by * r, r * 0.3, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
-        for (const [bx, by] of lobes) {
-          ctx.beginPath();
-          ctx.arc(bx * r - r * 0.1, by * r - r * 0.12, r * 0.06, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
-      break;
-    }
     case "デコポン": { // オレンジ(かき)と区別:そばかす。※口まわり(中央下)には置かない
       _clipBody(ctx, r, () => {
         ctx.fillStyle = shade(fruit.color, 0.28);
@@ -249,26 +297,25 @@ function drawTopper(ctx, r, fruit) {
       ctx.stroke();
       break;
     }
-    case "いちご": { // 上の緑ヘタ(5枚)+ 小さな茎
+    case "いちご": { // 上の緑ヘタ(低め・広がり)+ ごく短い茎。ニンジンっぽくならないよう背を低く
       ctx.fillStyle = LEAF;
       for (let i = -2; i <= 2; i++) {
         ctx.save();
-        ctx.translate(0, -r * 0.72);
-        ctx.rotate(i * 0.55);
+        ctx.translate(0, -r * 0.5);
+        ctx.rotate(i * 0.5);
         ctx.beginPath();
-        ctx.moveTo(0, r * 0.18);
-        ctx.lineTo(-r * 0.16, -r * 0.45);
-        ctx.lineTo(r * 0.16, -r * 0.45);
+        ctx.moveTo(0, r * 0.16);
+        ctx.lineTo(-r * 0.15, -r * 0.18);
+        ctx.lineTo(r * 0.15, -r * 0.18);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
       }
-      stem(0.16, 0.06);
+      // 茎は描かない(本体が小さいので浮いて見える=ニンジン化を防ぐ)。ヘタの葉だけ
       break;
     }
-    case "ぶどう": {
-      stem(0.28, 0.08);
-      leaf(1, 0.18, 1.12, 0.2);
+    case "ぶどう": { // 葉は左上に1枚(参考画像どおり)。茎は描かない
+      leaf(-1, 0.5, 0.6, 0.22);
       break;
     }
     case "かき": { // 柿のヘタ(がく):上に横へ広がる4枚のがく。星形に開く

@@ -5,7 +5,12 @@
 }
 
 body {
-  background: #FFF8E7;
+  /* 暖色のギンガムチェック(布っぽい背景)。網目は大きめ */
+  background-color: #ecd5b0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(190,147,92,0.38) 0 62px, rgba(190,147,92,0) 62px 124px),
+    repeating-linear-gradient(90deg, rgba(190,147,92,0.38) 0 62px, rgba(190,147,92,0) 62px 124px);
+  background-attachment: fixed;
   color: #5D4037;
   font-family: "Yomogi", "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
   display: flex;
@@ -33,10 +38,10 @@ body {
 
 .hud {
   display: flex;
-  justify-content: space-between;
-  align-items: stretch;
+  justify-content: center;
+  align-items: center;
   width: 100%;
-  gap: 8px;
+  gap: 7px;
 }
 
 .title {
@@ -47,6 +52,80 @@ body {
   text-shadow: 2px 2px 0 #fff, 3px 3px 0 rgba(46, 125, 50, 0.18);
   letter-spacing: 1px;
 }
+
+/* 半透明でふわふわ浮く泡風のスコア表示 */
+.bubble {
+  flex: 0 0 auto;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255,255,255,0.85), rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 50% 60%, rgba(255,242,214,0.5) 0%, rgba(232,202,152,0.45) 78%, rgba(222,188,132,0.45) 100%);
+  border: 2px solid rgba(255,255,255,0.7);
+  box-shadow: inset 0 -6px 11px rgba(176,132,72,0.28), 0 3px 7px rgba(150,110,60,0.22);
+}
+
+.bubble-label {
+  font-family: "Hachi Maru Pop", "Yomogi", sans-serif;
+  font-size: 9.5px;
+  color: #7a4e22;
+  letter-spacing: -0.5px;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+}
+
+/* 半透明でも読めるように:濃い縁取り＋白い中身＋影。サイズ控えめでも太く */
+.bubble-value {
+  font-family: "Hachi Maru Pop", "Yomogi", sans-serif;
+  font-size: 19px;
+  font-weight: bold;
+  color: #FFFFFF;
+  -webkit-text-stroke: 1.6px #6b3d12;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 1px rgba(90,52,16,0.5);
+  line-height: 1;
+}
+
+.bubble-next {
+  width: 36px;
+  height: 36px;
+}
+
+/* 丸いツヤつきボタン(やりなおす)。バブルと同じ半透明テイスト */
+.round-btn {
+  flex: 0 0 auto;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.7);
+  color: #8a5a2b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255,255,255,0.82), rgba(255,255,255,0) 48%),
+    radial-gradient(circle at 50% 60%, rgba(255,242,214,0.5) 0%, rgba(232,198,140,0.45) 80%, rgba(221,183,119,0.45) 100%);
+  box-shadow: inset 0 -5px 9px rgba(176,132,72,0.28), 0 3px 7px rgba(150,110,60,0.22);
+}
+
+/* ふわふわ浮く動き(バブル・ボタン)。少しずつ位相をずらして個別に浮かせる */
+@keyframes bubbleFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+.bubble, .round-btn {
+  animation: bubbleFloat 3.2s ease-in-out infinite;
+}
+.hud > *:nth-child(2) { animation-delay: -0.8s; }
+.hud > *:nth-child(3) { animation-delay: -1.6s; }
+.hud > *:nth-child(4) { animation-delay: -2.4s; }
 
 .title-sub {
   display: inline-block;

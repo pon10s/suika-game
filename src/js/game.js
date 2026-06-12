@@ -7,9 +7,10 @@ const GAME = {
   wallThickness: 16,
   topMargin: 128,       // 箱の縁(ここから下が箱の中)
   cloudY: 42,           // 雲の中心Y(箱の上)。フルーツはこの下にぶら下がる
-  limitLineY: 158,      // 上限ライン(超えたままだとゲームオーバー)
+  limitLineY: 128,      // 上限ライン=箱の一番上(topMarginと同じ)。ここを超えたままだとゲームオーバー
   gameOverGraceMs: 900,  // 上限ライン超えがこの時間続いたらゲームオーバー(短め=判定厳しめ)
   dyingMs: 1100,        // ゲームオーバー時の「プルプル震える」演出の長さ
+  waitAnimMs: 420,      // 次の果物が出てきた瞬間の「プルプル+目つむり」演出の長さ
   landFallbackMs: 2500, // 着地検知が来ない場合の保険(これで次を出す)
 };
 
@@ -19,15 +20,16 @@ class Game {
     this.ctx = canvas.getContext("2d");
 
     this.engine = Matter.Engine.create();
-    this.engine.gravity.scale = 0.0014; // 落下を少し速く(既定0.001)
-    this.engine.enableSleeping = true;  // 静止したら眠らせる→止まり際の左右ゆらゆらを抑える
-    // ソルバーの反復を増やして、積み重なった果物の「ぷるぷる」「めり込みの押し戻し反動」を抑える
-    this.engine.positionIterations = 14;
-    this.engine.velocityIterations = 10;
-    this.engine.constraintIterations = 4;
+    this.engine.gravity.scale = 0.0016; // 落下速度を少し速く(既定0.001)
+    this.engine.enableSleeping = true;  // 落ち着いた山は眠らせる(動いている果物は止めない)
+    // ソルバーの反復を多めに=積み重なりの「プルプル」を抑え、速い落下でもめり込まない
+    this.engine.positionIterations = 30;
+    this.engine.velocityIterations = 22;
+    this.engine.constraintIterations = 6;
     this.world = this.engine.world;
 
     this.dropX = GAME.width / 2;     // 待機フルーツのX位置
+    this.waitAnimStart = performance.now(); // 待機フルーツの登場アニメ開始時刻
     this.currentIndex = this.randomFruitIndex();
     this.nextIndex = this.randomFruitIndex();
     this.canDrop = true;             // 次のフルーツを落とせる状態か
@@ -82,6 +84,9 @@ class Game {
     };
     Matter.Composite.remove(this.world, a);
     Matter.Composite.remove(this.world, b);
+    // 下の果物が消えると、その上に乗って眠っていた果物が固まったまま落ちないことがある。
+    // 合体(=果物の消滅/生成)のたびに全フルーツを起こして、ちゃんと重力に従わせる。
+    this.wakeAllFruits();
 
     if (a.fruitIndex === FRUITS.length - 1) {
       // スイカ同士:両方消滅してボーナス
@@ -105,19 +110,28 @@ class Game {
     this.effects.push({ x, y, r, color, age: 0, life: 16 });
   }
 
+  // 眠っているフルーツを全部起こす(支えが消えたあと固まらないように)
+  wakeAllFruits() {
+    for (const b of Matter.Composite.allBodies(this.world)) {
+      if (b.label === "fruit" && b.isSleeping) Matter.Sleeping.set(b, false);
+    }
+  }
+
   // フルーツのボディ生成(落下・合体で共通)。手触りの調整はここ一箇所
   // 本家っぽく:ぶつかると回転し、抵抗少なめでよく転がる(でも跳ねすぎない)
   createFruitBody(index, x, y) {
     const radius = FRUITS[index].radius;
     const body = Matter.Bodies.circle(x, y, radius, {
       label: "fruit",
-      restitution: 0,         // 反動ゼロ(ぶつかっても跳ね返って戻らない)
-      friction: 0,            // 接地の摩擦ゼロ→床を走る間は一切減速しない(見た目の回転は描画側で表現)
-      frictionStatic: 0,      // 動き出しの引っかかり無し
-      frictionAir: 0,         // 空気抵抗ゼロ→何もない所では止まらず動き続ける
-      sleepThreshold: 90,     // 眠るまで長めに(動いている間に勝手に止まらない)。揺れ止めの保険のみ
-      // 質量を半径に比例(面積比だと大物が重すぎる)→ 大きい果物も軽く押せる
-      density: 0.012 / radius,
+      restitution: 0,         // 弾力ゼロ=固い物体。めり込んで跳ね返らない
+      friction: 0,            // 摩擦ゼロ→床を滑る果物は何かに当たるまで止まらない(回転は描画で表現)
+      frictionStatic: 0,      // 動き出しの引っかかり無し(押されたらすぐ動く)
+      frictionAir: 0,         // 空気抵抗なし→何もない所では減速しない
+      slop: 0.02,             // めり込み許容を小さく=固い当たり(沈み込み/跳ね戻りを抑える)
+      sleepThreshold: 90,     // 完全に止まった果物だけ眠らせる(動いている間は止めない)
+      // 質量を半径の約2.4乗に(density ∝ r^0.4)。大きい果物はしっかり重い(比≈139)。
+      // r^2.5まで上げると質量比が極端でソルバーが不安定化(プルプル)するため、安定する2.4に。
+      density: 0.0008 * Math.pow(radius, 0.4),
     });
     body.fruitIndex = index;
     return body;
@@ -129,8 +143,8 @@ class Game {
   }
 
   // ---- ゲームオーバー判定 ----
-  // 「着地済み」かつほぼ静止したフルーツが上限ラインを超えた状態が gameOverGraceMs 続いたら終了
-  // (落とした直後のフルーツはラインより上に出現するため、未着地のものは対象外にする)
+  // 着地済みフルーツの「重心」が箱の上端の面を一瞬でも超えたら即アウト
+  // (ぶつかって弾かれて上に出たときも逃さない。落下中・未着地のものは対象外)
 
   // 万一フルーツが箱の外へすり抜けたら箱の中へ戻す(消失バグの保険)
   recoverEscaped() {
@@ -142,7 +156,7 @@ class Game {
         Matter.Body.setPosition(body, { x: GAME.width / 2, y: GAME.height - GAME.wallThickness - r });
         Matter.Body.setVelocity(body, { x: 0, y: 0 });
         Matter.Body.setAngularVelocity(body, 0);
-        body._lastX = undefined; // 見た目回転の基準をリセット(瞬間移動で回りすぎないように)
+        body._lastX = undefined; // 見た目回転の基準をリセット
       }
     }
   }
@@ -150,20 +164,13 @@ class Game {
   checkGameOver() {
     if (this.phase !== "playing") return;
     this.recoverEscaped();
-    // 着地済みフルーツの上端が上限ラインを超えていれば対象(速度は問わない=連打のあふれも確実に検知)
+    // 着地済みフルーツの重心が箱の上端の面(limitLineY)を一瞬でも超えたら即アウト
     const over = Matter.Composite.allBodies(this.world).some((body) =>
       body.label === "fruit" &&
       body.hasLanded &&
-      body.position.y - FRUITS[body.fruitIndex].radius < GAME.limitLineY
+      body.position.y < GAME.limitLineY
     );
-    if (!over) {
-      this.overLimitSince = null;
-      return;
-    }
-    if (this.overLimitSince === null) this.overLimitSince = Date.now();
-    if (Date.now() - this.overLimitSince >= GAME.gameOverGraceMs) {
-      this.startDying();
-    }
+    if (over) this.startDying();
   }
 
   // ゲームオーバー演出開始:物理を止めて、フルーツが目をつむってプルプル震える
@@ -190,6 +197,7 @@ class Game {
     this.nextIndex = this.randomFruitIndex();
     clearTimeout(this.landTimer);
     this.activeBody = null;
+    this.waitAnimStart = performance.now();
     this.canDrop = true;
     if (this.onScoreChange) this.onScoreChange(0);
     if (this.onNextChange) this.onNextChange(this.nextIndex);
@@ -252,6 +260,7 @@ class Game {
     this.currentIndex = this.nextIndex;
     this.nextIndex = this.randomFruitIndex();
     this.moveTo(this.dropX); // 新フルーツの半径で位置を補正
+    this.waitAnimStart = performance.now(); // 新しい待機フルーツの登場アニメ
     this.canDrop = true;
     if (this.onNextChange) this.onNextChange(this.nextIndex);
   }
@@ -272,21 +281,41 @@ class Game {
     ctx.clearRect(0, 0, GAME.width, GAME.height);
 
     const playing = this.phase === "playing";
-    this.drawBox(ctx);
+    this.drawBoxBack(ctx);   // ガラス瓶の奥側(本体・底・奥リム)
     if (playing) this.drawGuideLine(ctx);
 
-    // 雲は一番奥(フルーツより先に描く)→ 落とした瞬間も含めて常にフルーツの裏
-    if (playing) drawSprite(ctx, getCloudSprite(), this.dropX, GAME.cloudY);
+    // 雲は一番奥(フルーツより先に描く)→ 落とした瞬間も含めて常にフルーツの裏。
+    // 左右に伸び縮みさせて「もくもく」呼吸させる(見た目だけ)
+    if (playing) {
+      const tt = performance.now() / 1000;
+      const sx = 1 + Math.sin(tt * 4.8) * 0.07;
+      const sy = 1 - Math.sin(tt * 4.8) * 0.05;
+      ctx.save();
+      ctx.translate(this.dropX, GAME.cloudY);
+      ctx.scale(sx, sy);
+      drawSprite(ctx, getCloudSprite(), 0, 0);
+      ctx.restore();
+    }
 
     for (const body of Matter.Composite.allBodies(this.world)) {
       if (body.label === "fruit") this.drawFruit(ctx, body);
     }
 
-    // 待機フルーツは雲の手前(完全に見える)
+    // 待機フルーツは雲の手前(完全に見える)。登場直後は一瞬プルプル＋目つむり→すぐ通常の顔
     if (playing && this.canDrop) {
-      drawSprite(ctx, getFruitSprite(this.currentIndex), this.dropX, this.waitCenterY(this.currentIndex));
+      const wx = this.dropX, wy = this.waitCenterY(this.currentIndex);
+      const elapsed = performance.now() - this.waitAnimStart;
+      if (elapsed < GAME.waitAnimMs) {
+        const fruit = FRUITS[this.currentIndex];
+        const j = fruit.radius * 0.06;
+        drawFruitShape(ctx, wx + (Math.random() * 2 - 1) * j, wy + (Math.random() * 2 - 1) * j,
+          fruit, 0, fruit.radius, { eyes: "closed" });
+      } else {
+        drawSprite(ctx, getFruitSprite(this.currentIndex), wx, wy);
+      }
     }
 
+    this.drawBoxFront(ctx);  // ガラス瓶の手前(前リム・ハイライト)→ 上の果物がリムの奥に隠れて3Dに見える
     this.drawEffects(ctx);
 
     // 通常の顔の静止画(=証跡)を描き終えてから通知。main.js はこの瞬間にキャンバスを撮る
@@ -294,28 +323,84 @@ class Game {
     requestAnimationFrame(() => this.draw());
   }
 
-  drawBox(ctx) {
-    const t = GAME.wallThickness;
-    // 枠線なし(塗りのみ)。箱のフチの線は出さない
-    ctx.fillStyle = "#C8A165";
-    const walls = [
-      [0, GAME.height - t, GAME.width, t],
-      [0, GAME.topMargin, t, GAME.height - GAME.topMargin],
-      [GAME.width - t, GAME.topMargin, t, GAME.height - GAME.topMargin],
-    ];
-    for (const [x, y, w, h] of walls) {
-      ctx.fillRect(x, y, w, h);
-    }
-    // 上限ライン(赤の点線)はプレイ中のみ
-    if (this.phase === "playing") {
-      ctx.strokeStyle = "#E74C3C";
-      ctx.setLineDash([8, 6]);
-      ctx.beginPath();
-      ctx.moveTo(GAME.wallThickness, GAME.limitLineY);
-      ctx.lineTo(GAME.width - GAME.wallThickness, GAME.limitLineY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
+  // 開いた四角柱(角箱)の寸法。奥の上辺(yBack・高い)と手前の上辺(yFront・低い)で奥行きを出す。
+  // dx=奥に行くほど狭く見せる遠近の食い込み(箱の中をのぞく立体感)。
+  boxMetrics() {
+    const L = GAME.wallThickness, R = GAME.width - GAME.wallThickness;
+    const B = GAME.height - GAME.wallThickness;
+    return {
+      L, R, B,
+      yBack: GAME.topMargin - 18,   // 奥の上辺(高い)
+      yFront: GAME.topMargin + 16,  // 手前の上辺(低い)
+      dx: 22,                       // 奥の遠近の食い込み
+    };
+  }
+
+  // 開いた箱の外側シルエット(手前下→手前左上→奥左上→奥右上→手前右上→手前下)
+  // ※手前の上辺(yFrontの横線)はここには含めない。それは drawBoxFront でフルーツの手前に描く。
+  boxOutline(ctx, m) {
+    ctx.beginPath();
+    ctx.moveTo(m.L, m.B);
+    ctx.lineTo(m.L, m.yFront);
+    ctx.lineTo(m.L + m.dx, m.yBack);
+    ctx.lineTo(m.R - m.dx, m.yBack);
+    ctx.lineTo(m.R, m.yFront);
+    ctx.lineTo(m.R, m.B);
+    ctx.closePath();
+  }
+
+  // 奥側(フルーツより先):本体＋イラスト調の奥行き陰影(均一フラット・直線)＋太い外枠。
+  drawBoxBack(ctx) {
+    const m = this.boxMetrics();
+    const BROWN = "#B5853F"; // 太い外枠(やわらかい薄茶・濃いめ)
+    ctx.save();
+
+    // ガラス本体(うっすら=中身が見える)
+    this.boxOutline(ctx, m);
+    ctx.fillStyle = "rgba(252,246,232,0.30)";
+    ctx.fill();
+
+    // 奥行きの陰影(イラスト調=均一なフラット色・まっすぐ)。clip
+    ctx.save();
+    this.boxOutline(ctx, m);
+    ctx.clip();
+    const wallSh = "rgba(150,118,74,0.18)"; // 壁
+    const floorSh = "rgba(150,118,74,0.26)"; // 床(少し濃い)
+    ctx.fillStyle = wallSh;
+    // 奥の内壁(上の台形帯)
+    ctx.beginPath();
+    ctx.moveTo(m.L + m.dx, m.yBack); ctx.lineTo(m.R - m.dx, m.yBack);
+    ctx.lineTo(m.R - m.dx, m.yBack + 24); ctx.lineTo(m.L + m.dx, m.yBack + 24); ctx.closePath();
+    ctx.fill();
+    // 左右の内壁(縦帯)
+    ctx.fillRect(m.L, m.yFront, 22, m.B - m.yFront);
+    ctx.fillRect(m.R - 22, m.yFront, 22, m.B - m.yFront);
+    // 床(下の帯・少し濃い)
+    ctx.fillStyle = floorSh;
+    ctx.fillRect(m.L, m.B - 30, m.R - m.L, 30);
+    ctx.restore();
+
+    // 太い外枠(奥の上辺・斜めの横辺・縦の辺・底)。これより手前にフルーツが来る
+    this.boxOutline(ctx, m);
+    ctx.lineJoin = "miter";
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = BROWN;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 手前側(フルーツより後):手前の上辺(横線)。これでフルーツが手前辺の奥に見え、開口の四辺がつながる。
+  drawBoxFront(ctx) {
+    const m = this.boxMetrics();
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(m.L, m.yFront);
+    ctx.lineTo(m.R, m.yFront);
+    ctx.lineWidth = 8;
+    ctx.lineCap = "butt";
+    ctx.strokeStyle = "#B5853F";
+    ctx.stroke();
+    ctx.restore();
   }
 
   // 合体の破裂エフェクト(白い輪＋きらきらが広がって消える)
@@ -370,9 +455,8 @@ class Game {
         fruit, body.angle, fruit.radius, { eyes: "closed" });
       return;
     }
-    // 通常:事前生成スプライトを描く。
-    // 物理は抵抗ゼロでよく滑る(=回転はほぼ無い)ので、見た目だけ「横移動した距離ぶん回す」
-    // ことで、転がっているように見せる(車輪と同じ:進んだ距離 ÷ 半径 = 回転角)。
+    // 通常:摩擦ゼロで物理回転しないので、見た目だけ「横に進んだ距離 ÷ 半径」で回す
+    // (車輪と同じ理屈=転がって見える)。いちご・ぶどうも横移動で一緒に転がる。
     const s = getFruitSprite(body.fruitIndex);
     const radius = FRUITS[body.fruitIndex].radius;
     if (body._lastX === undefined) { body._lastX = body.position.x; body._rollAngle = body.angle; }
