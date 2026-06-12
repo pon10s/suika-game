@@ -462,6 +462,8 @@ class Game {
 
     const index = this.currentIndex;
     const body = this.createFruitBody(index, this.dropX, this.waitCenterY(index));
+    // 待機中と同じ左30°の傾きのまま落とす(真下に落ちる間は回転せず傾きを保つ)
+    body._visualAngle = -Math.PI / 6;
     Matter.Composite.add(this.world, body);
     this.dropCount++;
 
