@@ -48,11 +48,11 @@ async function submitScore(token, nickname, score, shot) {
   }
 }
 
-// 全期間TOP20を取得。失敗時は null
+// 全期間TOP50を取得。失敗時は null
 // shot 列を含めて取得を試み、まだ列が無い(=移行前)なら shot 無しで再取得する。
 // これで「DB移行前に新コードを公開しても一覧が壊れない」ようにする。
-async function fetchTop20() {
-  const base = SUPABASE_URL + "/rest/v1/scores?order=score.desc&limit=20&select=";
+async function fetchTop50() {
+  const base = SUPABASE_URL + "/rest/v1/scores?order=score.desc&limit=50&select=";
   try {
     let res = await fetch(base + "nickname,score,created_at,shot", { headers: API_HEADERS });
     if (!res.ok) {

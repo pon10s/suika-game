@@ -120,7 +120,7 @@ async function openRanking() {
   loading.textContent = "読み込み中…";
   rankingListEl.appendChild(loading);
   rankingEl.classList.remove("hidden");
-  renderRanking(rankingListEl, await fetchTop20());
+  renderRanking(rankingListEl, await fetchTop50());
 }
 
 document.getElementById("open-ranking").addEventListener("click", openRanking);
