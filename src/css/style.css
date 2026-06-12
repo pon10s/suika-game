@@ -536,3 +536,158 @@ body {
   color: #C8A165;
   font-size: 12px;
 }
+
+/* ===== リトライ確認ダイアログ ===== */
+.retry-card {
+  padding: 26px 34px;
+}
+.retry-title {
+  color: #6b3d12;
+  font-family: "Hachi Maru Pop", "Yomogi", sans-serif;
+  font-size: 20px;
+  margin-bottom: 20px;
+}
+.retry-btns {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+/* まんまるい黄色のピルボタン(画像イメージに合わせる) */
+.retry-btn {
+  min-width: 96px;
+  padding: 10px 18px;
+  border: 2px solid #E8A41C;
+  border-radius: 999px;
+  font-family: "Hachi Maru Pop", "Yomogi", sans-serif;
+  font-size: 16px;
+  color: #7a4e10;
+  cursor: pointer;
+  background: linear-gradient(#FFD876, #FBB72E);
+  box-shadow: inset 0 -3px 0 rgba(180,120,20,0.35), 0 3px 5px rgba(150,110,60,0.3);
+}
+.retry-btn:hover { filter: brightness(1.04); }
+.retry-btn:active { transform: translateY(1px); box-shadow: inset 0 -1px 0 rgba(180,120,20,0.35), 0 1px 3px rgba(150,110,60,0.3); }
+
+/* ===== リセット開始演出 ===== */
+.intro {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  pointer-events: all;       /* 演出中は下のキャンバスに触らせない */
+  z-index: 5;
+}
+.intro.hidden { display: none; }
+
+/* 左右に分かれたカーテン。柄・大きさは body 背景のギンガムチェックと同一にして、
+   閉じ切ると背景と同化して見えるようにする。 */
+.curtain {
+  position: absolute;
+  top: 0;
+  width: 53%;                /* 2枚で106% → 中央で重なり、隙間なく閉じる */
+  height: 116%;              /* 下へはみ出させ、箱の左右・下側まで完全に覆う(overflowで切る) */
+  background-color: #ecd5b0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(190,147,92,0.38) 0 62px, rgba(190,147,92,0) 62px 124px),
+    repeating-linear-gradient(90deg, rgba(190,147,92,0.38) 0 62px, rgba(190,147,92,0) 62px 124px);
+  box-shadow: 0 6px 16px rgba(120,86,40,0.22);
+  will-change: transform;
+}
+/* 何もクラスが無いとき(表示直後)は画面外に逃がしておく=チラ見え防止 */
+.curtain-left  { left: 0;  transform: translateX(-118%); }
+.curtain-right { right: 0; transform: translateX(118%); }
+
+/* 閉じる:横から入り、上が先に・下が遅れてついてくる柔らかい動き(skewで表現)。
+   ease-outでゆっくり入り、最後に下がふわっと追いつく。 */
+@keyframes closeLeft {
+  0%   { transform: translateX(-118%) skewX(-16deg); }
+  55%  { transform: translateX(-26%)  skewX(-12deg); }
+  100% { transform: translateX(0)     skewX(0); }
+}
+@keyframes closeRight {
+  0%   { transform: translateX(118%)  skewX(16deg); }
+  55%  { transform: translateX(26%)   skewX(12deg); }
+  100% { transform: translateX(0)     skewX(0); }
+}
+.intro.closing .curtain-left  { animation: closeLeft  .85s cubic-bezier(.25,.6,.35,1) forwards; }
+.intro.closing .curtain-right { animation: closeRight .85s cubic-bezier(.25,.6,.35,1) forwards; }
+
+/* 開く:左右へはける */
+@keyframes openLeft  { from { transform: translateX(0); } to { transform: translateX(-120%); } }
+@keyframes openRight { from { transform: translateX(0); } to { transform: translateX(120%); } }
+.intro.opening .curtain-left  { animation: openLeft  .55s cubic-bezier(.5,0,.82,.4) forwards; }
+.intro.opening .curtain-right { animation: openRight .55s cubic-bezier(.5,0,.82,.4) forwards; }
+
+/* フルーツ入りシャボン玉 */
+.intro-bubbles { position: absolute; inset: 0; }
+.intro-bubble {
+  position: absolute;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  animation: introFloat 3.4s ease-in-out infinite;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255,255,255,0.9), rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 50% 60%, rgba(255,252,244,0.42) 0%, rgba(236,210,160,0.34) 80%, rgba(224,192,138,0.32) 100%);
+  border: 2px solid rgba(255,255,255,0.75);
+  box-shadow: inset 0 -5px 10px rgba(176,132,72,0.22), 0 3px 7px rgba(150,110,60,0.18);
+}
+.intro-bubble-fruit { display: block; }
+@keyframes introFloat {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0); }
+  50%      { transform: translate(-50%, -50%) translateY(-11px); }
+}
+
+/* Ready? / GO!! の文字 */
+.intro-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.intro-ready, .intro-go {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: "Hachi Maru Pop", "Yomogi", sans-serif;
+}
+.intro-ruby {
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: #E53935;
+  -webkit-text-stroke: 0.5px #fff;
+  paint-order: stroke fill;
+}
+.intro-ready .intro-main {
+  font-size: 50px;
+  color: #8BC34A;
+  -webkit-text-stroke: 2px #fff;
+  paint-order: stroke fill;
+  text-shadow: 3px 4px 0 rgba(85,139,47,0.35);
+  animation: readyIn .5s ease-out both;
+}
+.intro-go .intro-ruby { color: #E53935; }
+.intro-go .intro-main {
+  font-size: 76px;
+  color: #FFC628;
+  -webkit-text-stroke: 2.4px #B97400;
+  paint-order: stroke fill;
+  text-shadow: 0 5px 0 #C77800, 0 0 16px rgba(255,198,40,0.7);
+  animation: goIn .55s cubic-bezier(.2,1.5,.5,1) both;
+}
+@keyframes readyIn {
+  0%   { opacity: 0; transform: scale(.55); }
+  45%  { opacity: 1; }
+  100% { opacity: 1; transform: scale(1.06); }
+}
+@keyframes goIn {
+  0%   { opacity: 0; transform: scale(.4);  filter: blur(7px); }
+  50%  { opacity: 1; transform: scale(1.28); filter: blur(1.5px); }
+  72%  { transform: scale(1.02); filter: blur(0); }
+  100% { opacity: 1; transform: scale(1.12); filter: blur(0); }
+}

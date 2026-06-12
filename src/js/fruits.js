@@ -2,18 +2,20 @@
 // score は「合体でそのフルーツができたとき」に加算する点数(本家方式)
 // face: laugh=元気に笑ってる / smile=にっこり / wink=いたずらっこ /
 //       angry=ちょっとおこ / relaxed=ほんわか / sulky=すねてる / shy=てれてれ
+// rimL: 縁取りの明度倍率(省略時は 0.82)。小さいほど濃い(暗い)縁になる。
+// さくらんぼ・いちご・なし・メロン・スイカは明るすぎたので本体よりしっかり濃い縁にする。
 const FRUITS = [
-  { name: "さくらんぼ",   radius: 16,  color: "#F23B3B", score: 0,  face: "laugh" },
-  { name: "いちご",       radius: 24,  color: "#FF5160", score: 1,  face: "shy" },
-  { name: "ぶどう",       radius: 32,  color: "#B45CDB", score: 3,  face: "wink" },
+  { name: "さくらんぼ",   radius: 14,  color: "#F23B3B", score: 0,  face: "laugh",   rimL: 0.6 },
+  { name: "いちご",       radius: 21,  color: "#FF5160", score: 1,  face: "shy",     rimL: 0.6 },
+  { name: "ぶどう",       radius: 30,  color: "#B45CDB", score: 3,  face: "wink" },
   { name: "デコポン",     radius: 40,  color: "#FFA21F", score: 6,  face: "deko" },
   { name: "かき",         radius: 50,  color: "#FF7A1A", score: 10, face: "relaxed" },
   { name: "りんご",       radius: 60,  color: "#F5283C", score: 15, face: "smile" },
-  { name: "なし",         radius: 72,  color: "#C6E23A", score: 21, face: "nashi" },
+  { name: "なし",         radius: 72,  color: "#D8D64A", score: 21, face: "nashi",   rimL: 0.6 },
   { name: "もも",         radius: 84,  color: "#FF9CC4", score: 28, face: "momo" },
   { name: "パイナップル", radius: 96,  color: "#FFD51F", score: 36, face: "pine" },
-  { name: "メロン",       radius: 110, color: "#86D24A", score: 45, face: "sleepy" },
-  { name: "スイカ",       radius: 125, color: "#36A94E", score: 55, face: "laugh" },
+  { name: "メロン",       radius: 110, color: "#86D24A", score: 45, face: "sleepy",  rimL: 0.6 },
+  { name: "スイカ",       radius: 125, color: "#36A94E", score: 55, face: "laugh",   rimL: 0.6 },
 ];
 
 // スイカ同士が合体したときの消滅ボーナス
@@ -28,13 +30,63 @@ function shade(hex, f) {
   return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
 }
 
+// --- HSL ベースの色調整 ---
+// 彩度を上げたり、縁取りを「黒へ寄せず」明るい同系色にするために使う。
+function _hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function _rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  return [h, s, l];
+}
+function _hslToHex(h, s, l) {
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1 / 3);
+  }
+  const to = (v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0");
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+const _clamp01 = (v) => Math.max(0, Math.min(1, v));
+// 色相は保ったまま、彩度(sMul)・明度(lMul)を倍率で調整した色を返す。
+function tone(hex, sMul = 1, lMul = 1) {
+  const [h, s, l] = _rgbToHsl(..._hexToRgb(hex));
+  return _hslToHex(h, _clamp01(s * sMul), _clamp01(l * lMul));
+}
+
+// 全フルーツの本体色をビビッドに(色相そのまま・彩度を底上げ・ほんの少し明るく)。
+// 縁取り・目口・模様もこの本体色から派生するので、ここを上げれば全体が鮮やかになる。
+for (const _f of FRUITS) { _f.color = tone(_f.color, 1.3, 1.04); }
+
 // フルーツを1個描く(イラスト調:ベタ塗り＋太い縁取り＋本体同系色の濃い目口)。
 // ゲーム画面・ネクスト表示・進化リストで共用。drawRadius でミニ表示も可。
 // opts.eyes === "closed" でゲームオーバー時の「目をつむった顔」になる。
 function drawFruitShape(ctx, x, y, fruit, angle = 0, drawRadius = fruit.radius, opts = {}) {
   const r = drawRadius;
-  const outline = shade(fruit.color, 0.34); // 縁取り:本体より濃い同系色
-  const ink = shade(fruit.color, 0.48);     // 目・口:さらに濃い同系色
+  // 縁取り:黒へ寄せず、彩度を上げた同系色にする。明度は fruit.rimL(既定0.82)で個別調整。
+  const outline = tone(fruit.color, 1.2, fruit.rimL ?? 0.82);
+  const ink = tone(fruit.color, 1.25, (fruit.rimL ?? 0.82) * 0.7);  // 目・口:縁よりさらに濃いめ。黒は使わない
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
@@ -120,14 +172,16 @@ function _clipBody(ctx, r, draw) {
   ctx.restore();
 }
 
-// いちご:丸みのある三角(下が尖る)。当たり判定は円のまま、見た目だけ三角に。
+// いちご:見本のような、上が平たく横にふくらみ、下だけ丸く尖る形。
 function drawStrawberryBody(ctx, r, fruit, outline) {
   const trace = () => {
     ctx.beginPath();
-    ctx.moveTo(0, r * 0.98);
-    ctx.bezierCurveTo(-r * 0.98, r * 0.55, -r * 1.02, -r * 0.18, -r * 0.52, -r * 0.5);
-    ctx.bezierCurveTo(-r * 0.22, -r * 0.68, r * 0.22, -r * 0.68, r * 0.52, -r * 0.5);
-    ctx.bezierCurveTo(r * 1.02, -r * 0.18, r * 0.98, r * 0.55, 0, r * 0.98);
+    ctx.moveTo(0, r * 0.93);
+    ctx.bezierCurveTo(-r * 0.42, r * 0.82, -r * 0.78, r * 0.42, -r * 0.94, -r * 0.02);
+    ctx.bezierCurveTo(-r * 0.96, -r * 0.48, -r * 0.7, -r * 0.72, -r * 0.38, -r * 0.76);
+    ctx.bezierCurveTo(-r * 0.16, -r * 0.79, r * 0.16, -r * 0.79, r * 0.38, -r * 0.76);
+    ctx.bezierCurveTo(r * 0.7, -r * 0.72, r * 0.96, -r * 0.48, r * 0.94, -r * 0.02);
+    ctx.bezierCurveTo(r * 0.78, r * 0.42, r * 0.42, r * 0.82, 0, r * 0.93);
     ctx.closePath();
   };
   ctx.fillStyle = fruit.color;
@@ -167,15 +221,15 @@ function drawStrawberryBody(ctx, r, fruit, outline) {
   ctx.fill();
 }
 
-// ぶどう:円(粒)をはっきり重ねた逆三角形の房。色は均一(他の果物と同じフラットなテイスト)。
-// 当たり判定は円のまま。粒の縁取りは外周だけ残す(ストローク→塗りつぶしで内側の線を隠す)。
+// ぶどう:頬を外へ張り出した、丸みのある逆三角形の房。
+// 見た目の外周を当たり判定円の近くまで広げ、先端や頬が接触位置から浮いて見えないようにする。
 function drawGrapeBody(ctx, r, fruit, outline) {
-  const gr = r * 0.4;
-  // 上が広く下が尖る逆三角形(3-2-1)。円をしっかり重ねる
+  const gr = r * 0.38;
+  // 上段と中段を同じ3粒にして頬をふっくらさせ、下の1粒で丸い三角形にまとめる
   const grapes = [
-    [-0.46, -0.4], [0.0, -0.5], [0.46, -0.4], // 上段(広い)
-    [-0.24, -0.06], [0.24, -0.06],            // 中段
-    [0.0, 0.34],                              // 下段(尖り)
+    [-0.4, -0.36], [0.0, -0.54], [0.4, -0.36],
+    [-0.56, 0.16], [0.0, -0.02], [0.56, 0.16],
+    [0.0, 0.55],
   ];
   // 1) 全粒に太い縁取りをストローク → このあと塗りで内側を隠す=外周だけ縁取りが残る
   ctx.lineJoin = "round";
@@ -297,21 +351,24 @@ function drawTopper(ctx, r, fruit) {
       ctx.stroke();
       break;
     }
-    case "いちご": { // 上の緑ヘタ(低め・広がり)+ ごく短い茎。ニンジンっぽくならないよう背を低く
+    case "いちご": { // 見本に合わせた、低く横へ広がる丸い三つ葉状のヘタ
+      ctx.save();
+      ctx.translate(0, -r * 0.72);
       ctx.fillStyle = LEAF;
-      for (let i = -2; i <= 2; i++) {
-        ctx.save();
-        ctx.translate(0, -r * 0.5);
-        ctx.rotate(i * 0.5);
-        ctx.beginPath();
-        ctx.moveTo(0, r * 0.16);
-        ctx.lineTo(-r * 0.15, -r * 0.18);
-        ctx.lineTo(r * 0.15, -r * 0.18);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-      // 茎は描かない(本体が小さいので浮いて見える=ニンジン化を防ぐ)。ヘタの葉だけ
+      ctx.strokeStyle = LEAF_D;
+      ctx.lineWidth = Math.max(1, r * 0.045);
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.68, 0);
+      ctx.bezierCurveTo(-r * 0.7, -r * 0.2, -r * 0.46, -r * 0.27, -r * 0.28, -r * 0.15);
+      ctx.bezierCurveTo(-r * 0.2, -r * 0.42, r * 0.2, -r * 0.42, r * 0.28, -r * 0.15);
+      ctx.bezierCurveTo(r * 0.46, -r * 0.27, r * 0.7, -r * 0.2, r * 0.68, 0);
+      ctx.bezierCurveTo(r * 0.62, r * 0.2, r * 0.34, r * 0.19, r * 0.2, r * 0.08);
+      ctx.bezierCurveTo(r * 0.08, r * 0.3, -r * 0.08, r * 0.3, -r * 0.2, r * 0.08);
+      ctx.bezierCurveTo(-r * 0.34, r * 0.19, -r * 0.62, r * 0.2, -r * 0.68, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
       break;
     }
     case "ぶどう": { // 葉は左上に1枚(参考画像どおり)。茎は描かない

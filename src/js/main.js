@@ -140,12 +140,34 @@ document.getElementById("restart").addEventListener("click", () => {
   refreshPlayToken();
 });
 
-// プレイ中のやりなおし(確認ダイアログつき)
+// プレイ中のやりなおし:確認ダイアログ →「はい」で開始演出を挟んでリセット
+// busy = 確認ダイアログ表示中 or 演出中。落下などの操作を止め、二重起動も防ぐ。
+let busy = false;
+const retryConfirm = document.getElementById("retry-confirm");
+
 document.getElementById("reset-btn").addEventListener("click", () => {
-  if (game.score > 0 && !window.confirm("いまのゲームをやりなおしますか?")) return;
-  gameoverEl.classList.add("hidden");
-  game.restart();
-  refreshPlayToken();
+  if (busy) return;             // 演出中・ダイアログ中は無視(連打対策)
+  busy = true;
+  retryConfirm.classList.remove("hidden");
+});
+
+// 「いいえ」:ダイアログを閉じて元の画面へ。ゲーム状態は一切変更しない。
+document.getElementById("retry-no").addEventListener("click", () => {
+  retryConfirm.classList.add("hidden");
+  busy = false;
+});
+
+// 「はい」:開始演出を再生。カーテンで隠れた瞬間に裏でリセットする。
+document.getElementById("retry-yes").addEventListener("click", () => {
+  retryConfirm.classList.add("hidden");
+  ResetIntro.play({
+    onCovered: () => {
+      gameoverEl.classList.add("hidden");
+      game.restart();
+      refreshPlayToken();
+    },
+    onDone: () => { busy = false; },   // 演出完了後に操作可能へ
+  });
 });
 
 // サウンド:最初の操作でBGM開始(ブラウザの自動再生制限のため)
@@ -180,15 +202,18 @@ canvas.addEventListener("mousemove", (e) => {
 });
 
 canvas.addEventListener("click", () => {
+  if (busy) return;            // 確認ダイアログ・開始演出の最中は落とさない
   game.drop();
 });
 
 canvas.addEventListener("touchmove", (e) => {
   e.preventDefault();
+  if (busy) return;
   game.moveTo(toCanvasX(e.touches[0].clientX));
 }, { passive: false });
 
 canvas.addEventListener("touchend", (e) => {
   e.preventDefault();
+  if (busy) return;
   game.drop();
 }, { passive: false });

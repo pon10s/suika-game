@@ -10,8 +10,16 @@ const GAME = {
   limitLineY: 128,      // 上限ライン=箱の一番上(topMarginと同じ)。ここを超えたままだとゲームオーバー
   gameOverGraceMs: 900,  // 上限ライン超えがこの時間続いたらゲームオーバー(短め=判定厳しめ)
   dyingMs: 1100,        // ゲームオーバー時の「プルプル震える」演出の長さ
-  waitAnimMs: 420,      // 次の果物が出てきた瞬間の「プルプル+目つむり」演出の長さ
+  waitAnimMs: 700,      // 次の果物が出てきた瞬間の「ゆらゆら+目つむり」演出の長さ
   landFallbackMs: 2500, // 着地検知が来ない場合の保険(これで次を出す)
+  fixedTimestepMs: 1000 / 60,
+  maxFrameDeltaMs: 50,
+  quietFramesToSettle: 12,
+  quietPositionRange: 0.45,
+  wallContactResistance: 0,  // 床・壁の横滑り抵抗。0=ぶつかるまで減速せず滑り続ける
+  fruitContactResistance: 0.06,
+  idleSpinRate: 0.001,        // 静止中アイドル自転の基準速度(rad/frame)。実際は0.5〜2.0倍でばらつく
+
 };
 
 class Game {
@@ -21,17 +29,18 @@ class Game {
 
     this.engine = Matter.Engine.create();
     this.engine.gravity.scale = 0.0016; // 落下速度を少し速く(既定0.001)
-    this.engine.enableSleeping = true;  // 落ち着いた山は眠らせる(動いている果物は止めない)
+    this.engine.enableSleeping = false; // 即停止を避け、極小振動だけ独自に除去する
     // ソルバーの反復を多めに=積み重なりの「プルプル」を抑え、速い落下でもめり込まない
-    this.engine.positionIterations = 30;
-    this.engine.velocityIterations = 22;
-    this.engine.constraintIterations = 6;
+    this.engine.positionIterations = 36;
+    this.engine.velocityIterations = 28;
+    this.engine.constraintIterations = 8;
     this.world = this.engine.world;
 
     this.dropX = GAME.width / 2;     // 待機フルーツのX位置
     this.waitAnimStart = performance.now(); // 待機フルーツの登場アニメ開始時刻
-    this.currentIndex = this.randomFruitIndex();
-    this.nextIndex = this.randomFruitIndex();
+    this.dropCount = 0;
+    this.currentIndex = this.randomFruitIndex(0);
+    this.nextIndex = this.randomFruitIndex(1);
     this.canDrop = true;             // 次のフルーツを落とせる状態か
     this.activeBody = null;          // 落下中(着地待ち)のフルーツ
     this.landTimer = null;           // 着地検知の保険タイマー
@@ -48,9 +57,32 @@ class Game {
 
     this.createWalls();
     Matter.Events.on(this.engine, "collisionStart", (e) => this.handleCollisions(e));
-    Matter.Events.on(this.engine, "afterUpdate", () => this.checkGameOver());
-    Matter.Runner.run(Matter.Runner.create(), this.engine);
+    Matter.Events.on(this.engine, "collisionActive", (e) => this.dampenActiveCollisions(e));
+    Matter.Events.on(this.engine, "afterUpdate", () => {
+      this.updateVisualRotation();
+      this.settleQuietFruits();
+      this.checkGameOver();
+    });
+    this.physicsLastTime = performance.now();
+    this.physicsAccumulator = 0;
+    requestAnimationFrame((now) => this.updatePhysics(now));
     requestAnimationFrame(() => this.draw());
+  }
+
+  // 物理更新を固定60Hzにして、端末の描画フレームレートによる揺れ方の差をなくす。
+  updatePhysics(now) {
+    if (this.phase === "playing") {
+      const frameDelta = Math.min(now - this.physicsLastTime, GAME.maxFrameDeltaMs);
+      this.physicsAccumulator += Math.max(0, frameDelta);
+      while (this.physicsAccumulator >= GAME.fixedTimestepMs) {
+        Matter.Engine.update(this.engine, GAME.fixedTimestepMs);
+        this.physicsAccumulator -= GAME.fixedTimestepMs;
+      }
+    } else {
+      this.physicsAccumulator = 0;
+    }
+    this.physicsLastTime = now;
+    requestAnimationFrame((nextNow) => this.updatePhysics(nextNow));
   }
 
   // ---- 合体・スコア ----
@@ -61,20 +93,121 @@ class Game {
     for (const pair of event.pairs) {
       const a = pair.bodyA;
       const b = pair.bodyB;
+      const relativeSpeed = Math.hypot(
+        a.velocity.x - b.velocity.x,
+        a.velocity.y - b.velocity.y
+      );
+      if (relativeSpeed > 0.05) {
+        this.wakeFruit(a);
+        this.wakeFruit(b);
+      }
+      this.dampenCollisionPair(pair, 0.95);
       // 何かに触れたフルーツは「着地済み」にする(ゲームオーバー判定の対象になる)
       if (a.label === "fruit") a.hasLanded = true;
       if (b.label === "fruit") b.hasLanded = true;
-      // 落下中フルーツが床か他フルーツに触れたら、次のフルーツを出す
+      // 落下中フルーツが床か他フルーツに触れたら、次のフルーツを出す。
+      // 安定している土台まで起こすと「全体がブルッと沈む」ので、全体起こしはしない。
+      // 直接ぶつかったフルーツだけ上の relativeSpeed 判定で局所的に起きる。
       if (this.activeBody && (a === this.activeBody || b === this.activeBody)) {
         this.releaseNext();
       }
       if (a.label !== "fruit" || b.label !== "fruit") continue;
       if (a.fruitIndex !== b.fruitIndex) continue;
+      if (a._merging || b._merging) continue;
       if (merged.has(a.id) || merged.has(b.id)) continue;
+      a._merging = true;
+      b._merging = true;
       merged.add(a.id);
       merged.add(b.id);
       this.merge(a, b);
     }
+  }
+
+  // restitution=0でも、位置補正で生まれる分離速度が「跳ね」に見えることがある。
+  // 接触中だけ法線方向の速度を吸収し、果物同士は質量を保った平均速度へ少し寄せる。
+  dampenActiveCollisions(event) {
+    if (this.isGameOver) return;
+    for (const pair of event.pairs) {
+      this.dampenCollisionPair(pair, 0.18);
+      this.resistContactSlide(pair);
+    }
+  }
+
+  resistContactSlide(pair) {
+    const a = pair.bodyA;
+    const b = pair.bodyB;
+    const aFruit = a.label === "fruit";
+    const bFruit = b.label === "fruit";
+    if (!aFruit && !bFruit) return;
+
+    const nx = pair.collision.normal.x;
+    const ny = pair.collision.normal.y;
+    const tx = -ny;
+    const ty = nx;
+
+    if (aFruit && bFruit) {
+      const aTangent = a.velocity.x * tx + a.velocity.y * ty;
+      const bTangent = b.velocity.x * tx + b.velocity.y * ty;
+      const totalMass = a.mass + b.mass;
+      const commonTangent = (aTangent * a.mass + bTangent * b.mass) / totalMass;
+      Matter.Body.setVelocity(a, {
+        x: a.velocity.x + tx * (commonTangent - aTangent) * GAME.fruitContactResistance,
+        y: a.velocity.y + ty * (commonTangent - aTangent) * GAME.fruitContactResistance,
+      });
+      Matter.Body.setVelocity(b, {
+        x: b.velocity.x + tx * (commonTangent - bTangent) * GAME.fruitContactResistance,
+        y: b.velocity.y + ty * (commonTangent - bTangent) * GAME.fruitContactResistance,
+      });
+      return;
+    }
+
+    const fruit = aFruit ? a : b;
+    const wall = aFruit ? b : a;
+    if (!wall.isStatic) return;
+    const tangentSpeed = fruit.velocity.x * tx + fruit.velocity.y * ty;
+    Matter.Body.setVelocity(fruit, {
+      x: fruit.velocity.x - tx * tangentSpeed * GAME.wallContactResistance,
+      y: fruit.velocity.y - ty * tangentSpeed * GAME.wallContactResistance,
+    });
+  }
+
+  dampenCollisionPair(pair, strength) {
+    const a = pair.bodyA;
+    const b = pair.bodyB;
+    const aFruit = a.label === "fruit";
+    const bFruit = b.label === "fruit";
+    if (!aFruit && !bFruit) return;
+
+    if (aFruit && bFruit) {
+      const nx = pair.collision.normal.x;
+      const ny = pair.collision.normal.y;
+      const aNormal = a.velocity.x * nx + a.velocity.y * ny;
+      const bNormal = b.velocity.x * nx + b.velocity.y * ny;
+      const totalMass = a.mass + b.mass;
+      const commonNormal = (aNormal * a.mass + bNormal * b.mass) / totalMass;
+      Matter.Body.setVelocity(a, {
+        x: a.velocity.x + nx * (commonNormal - aNormal) * strength,
+        y: a.velocity.y + ny * (commonNormal - aNormal) * strength,
+      });
+      Matter.Body.setVelocity(b, {
+        x: b.velocity.x + nx * (commonNormal - bNormal) * strength,
+        y: b.velocity.y + ny * (commonNormal - bNormal) * strength,
+      });
+      return;
+    }
+
+    const fruit = aFruit ? a : b;
+    const wall = aFruit ? b : a;
+    if (!wall.isStatic) return;
+    const nx = pair.collision.normal.x;
+    const ny = pair.collision.normal.y;
+    const outwardX = fruit === a ? -nx : nx;
+    const outwardY = fruit === a ? -ny : ny;
+    const normalSpeed = fruit.velocity.x * outwardX + fruit.velocity.y * outwardY;
+    Matter.Body.setVelocity(fruit, {
+      x: fruit.velocity.x - outwardX * normalSpeed * strength,
+      y: fruit.velocity.y - outwardY * normalSpeed * strength,
+    });
   }
 
   merge(a, b) {
@@ -84,8 +217,7 @@ class Game {
     };
     Matter.Composite.remove(this.world, a);
     Matter.Composite.remove(this.world, b);
-    // 下の果物が消えると、その上に乗って眠っていた果物が固まったまま落ちないことがある。
-    // 合体(=果物の消滅/生成)のたびに全フルーツを起こして、ちゃんと重力に従わせる。
+    // 合体で支えが消えるため、全フルーツの微振動固定を解除して重力に従わせる。
     this.wakeAllFruits();
 
     if (a.fruitIndex === FRUITS.length - 1) {
@@ -110,10 +242,85 @@ class Game {
     this.effects.push({ x, y, r, color, age: 0, life: 16 });
   }
 
-  // 眠っているフルーツを全部起こす(支えが消えたあと固まらないように)
+  // 微振動固定中のフルーツを動ける状態へ戻す。
   wakeAllFruits() {
     for (const b of Matter.Composite.allBodies(this.world)) {
-      if (b.label === "fruit" && b.isSleeping) Matter.Sleeping.set(b, false);
+      this.wakeFruit(b);
+    }
+  }
+
+  wakeFruit(body) {
+    if (body.label !== "fruit") return;
+    body._quietFrames = 0;
+    body._quietAnchor = null;
+    body._lastQuietVelocity = null;
+    body._settled = false;
+  }
+
+  // 動きを早く止めず、見えないほど小さい速度だけをゼロにして微振動を消す。
+  settleQuietFruits() {
+    for (const body of Matter.Composite.allBodies(this.world)) {
+      if (body.label !== "fruit" || body === this.activeBody || !body.hasLanded) continue;
+      if (body._settled) {
+        Matter.Body.setVelocity(body, { x: 0, y: 0 });
+        Matter.Body.setAngularVelocity(body, 0);
+        continue;
+      }
+      if (!body._quietAnchor) {
+        body._quietAnchor = { x: body.position.x, y: body.position.y };
+      }
+      const previousVelocity = body._lastQuietVelocity;
+      const reversed =
+        previousVelocity &&
+        body.speed < 0.2 &&
+        Math.hypot(previousVelocity.x, previousVelocity.y) < 0.2 &&
+        body.velocity.x * previousVelocity.x + body.velocity.y * previousVelocity.y < 0;
+      if (reversed) {
+        Matter.Body.setVelocity(body, { x: 0, y: 0 });
+        Matter.Body.setAngularVelocity(body, 0);
+        body._settled = true;
+        continue;
+      }
+      body._lastQuietVelocity = { x: body.velocity.x, y: body.velocity.y };
+      const moved = Math.hypot(
+        body.position.x - body._quietAnchor.x,
+        body.position.y - body._quietAnchor.y
+      );
+      const isLocalJitter = moved <= GAME.quietPositionRange && body.speed < 0.16;
+      if (isLocalJitter) {
+        body._quietFrames = (body._quietFrames || 0) + 1;
+      } else {
+        body._quietFrames = 0;
+        body._quietAnchor = { x: body.position.x, y: body.position.y };
+      }
+      if (body._quietFrames < GAME.quietFramesToSettle) continue;
+      Matter.Body.setVelocity(body, { x: 0, y: 0 });
+      Matter.Body.setAngularVelocity(body, 0);
+      body._settled = true;
+    }
+  }
+
+  // 回転は描画専用。移動中は横の移動距離と円周を一致させる。
+  // 一部の果物だけは、静止中も重心を変えずにごくゆっくり自転し続ける。
+  updateVisualRotation() {
+    for (const body of Matter.Composite.allBodies(this.world)) {
+      if (body.label !== "fruit") continue;
+      const radius = FRUITS[body.fruitIndex].radius;
+      Matter.Body.setAngularVelocity(body, 0);
+      body._visualAngle ??= body.angle;
+      body._visualLastX ??= body.position.x;
+      const movedX = body.position.x - body._visualLastX;
+      if (Math.abs(movedX) > 0.01) {
+        // 実際に横移動した分だけ転がして見せる。ゆっくりした滑りも必ず回す。
+        // (0.01px未満は静止時の微振動とみなして無視 → 静止中は回らない)
+        body._visualAngle += movedX / radius;
+      } else if (body._idleSpinRate && body.speed < 0.5) {
+        // ほぼ静止中:選ばれた一部だけ、重心を変えずにごくゆっくり自転し続ける
+        // (落下中など speed が大きいときは自転させない=空中でクルクルしない)
+        body._visualAngle += body._idleSpinRate;
+      }
+      // 静止中の非自転フルーツは角度を保持(微振動では回らない)
+      body._visualLastX = body.position.x;
     }
   }
 
@@ -127,13 +334,24 @@ class Game {
       friction: 0,            // 摩擦ゼロ→床を滑る果物は何かに当たるまで止まらない(回転は描画で表現)
       frictionStatic: 0,      // 動き出しの引っかかり無し(押されたらすぐ動く)
       frictionAir: 0,         // 空気抵抗なし→何もない所では減速しない
-      slop: 0.02,             // めり込み許容を小さく=固い当たり(沈み込み/跳ね戻りを抑える)
-      sleepThreshold: 90,     // 完全に止まった果物だけ眠らせる(動いている間は止めない)
+      slop: 0.05,             // 過剰な位置補正による跳ね・微振動を避ける(Matter.js既定相当)
+      sleepThreshold: Infinity,
       // 質量を半径の約2.4乗に(density ∝ r^0.4)。大きい果物はしっかり重い(比≈139)。
       // r^2.5まで上げると質量比が極端でソルバーが不安定化(プルプル)するため、安定する2.4に。
       density: 0.0008 * Math.pow(radius, 0.4),
     });
     body.fruitIndex = index;
+    body._quietFrames = 0;
+    body._quietAnchor = null;
+    body._lastQuietVelocity = null;
+    body._settled = false;
+    body._visualAngle = 0;
+    body._visualLastX = x;
+    // 約1/3の果物だけが静止中も自転。向きランダム・速度は基準の0.5〜2.0倍でまちまち。
+    body._idleSpinRate =
+      Math.random() < 1 / 3
+        ? (Math.random() < 0.5 ? 1 : -1) * GAME.idleSpinRate * (0.5 + Math.random() * 1.5)
+        : 0;
     return body;
   }
 
@@ -156,7 +374,7 @@ class Game {
         Matter.Body.setPosition(body, { x: GAME.width / 2, y: GAME.height - GAME.wallThickness - r });
         Matter.Body.setVelocity(body, { x: 0, y: 0 });
         Matter.Body.setAngularVelocity(body, 0);
-        body._lastX = undefined; // 見た目回転の基準をリセット
+        body._visualLastX = body.position.x;
       }
     }
   }
@@ -193,8 +411,9 @@ class Game {
     this.effects = [];
     this.engine.timing.timeScale = 1; // 物理を再開
     this.overLimitSince = null;
-    this.currentIndex = this.randomFruitIndex();
-    this.nextIndex = this.randomFruitIndex();
+    this.dropCount = 0;
+    this.currentIndex = this.randomFruitIndex(0);
+    this.nextIndex = this.randomFruitIndex(1);
     clearTimeout(this.landTimer);
     this.activeBody = null;
     this.waitAnimStart = performance.now();
@@ -203,8 +422,10 @@ class Game {
     if (this.onNextChange) this.onNextChange(this.nextIndex);
   }
 
-  randomFruitIndex() {
-    return Math.floor(Math.random() * DROPPABLE_COUNT);
+  randomFruitIndex(dropNumber = this.dropCount) {
+    // 最初の10投(0〜9)は、最大でもデコポンまで。11投目から柿を含む通常抽選にする。
+    const count = dropNumber < 10 ? DROPPABLE_COUNT - 1 : DROPPABLE_COUNT;
+    return Math.floor(Math.random() * count);
   }
 
   // 雲にぶら下がる待機フルーツの中心Y(大きい果物ほど下にぶら下がる)
@@ -242,6 +463,7 @@ class Game {
     const index = this.currentIndex;
     const body = this.createFruitBody(index, this.dropX, this.waitCenterY(index));
     Matter.Composite.add(this.world, body);
+    this.dropCount++;
 
     if (typeof GameAudio !== "undefined") GameAudio.drop();
     // 着地するまで次のフルーツは出さない(canDrop=false)
@@ -258,7 +480,7 @@ class Game {
     clearTimeout(this.landTimer);
     this.activeBody = null;
     this.currentIndex = this.nextIndex;
-    this.nextIndex = this.randomFruitIndex();
+    this.nextIndex = this.randomFruitIndex(this.dropCount + 1);
     this.moveTo(this.dropX); // 新フルーツの半径で位置を補正
     this.waitAnimStart = performance.now(); // 新しい待機フルーツの登場アニメ
     this.canDrop = true;
@@ -290,10 +512,15 @@ class Game {
       const tt = performance.now() / 1000;
       const sx = 1 + Math.sin(tt * 4.8) * 0.07;
       const sy = 1 - Math.sin(tt * 4.8) * 0.05;
+      const cloud = getCloudSprite();
+      const cloudX = Math.min(
+        GAME.width - cloud.ext * sx,
+        Math.max(cloud.ext * sx, this.dropX)
+      );
       ctx.save();
-      ctx.translate(this.dropX, GAME.cloudY);
+      ctx.translate(cloudX, GAME.cloudY);
       ctx.scale(sx, sy);
-      drawSprite(ctx, getCloudSprite(), 0, 0);
+      drawSprite(ctx, cloud, 0, 0);
       ctx.restore();
     }
 
@@ -301,17 +528,25 @@ class Game {
       if (body.label === "fruit") this.drawFruit(ctx, body);
     }
 
-    // 待機フルーツは雲の手前(完全に見える)。登場直後は一瞬プルプル＋目つむり→すぐ通常の顔
+    // 待機フルーツは雲の手前。登場直後は小さくゆっくり揺れてから通常の顔になる。
     if (playing && this.canDrop) {
       const wx = this.dropX, wy = this.waitCenterY(this.currentIndex);
       const elapsed = performance.now() - this.waitAnimStart;
       if (elapsed < GAME.waitAnimMs) {
         const fruit = FRUITS[this.currentIndex];
-        const j = fruit.radius * 0.06;
-        drawFruitShape(ctx, wx + (Math.random() * 2 - 1) * j, wy + (Math.random() * 2 - 1) * j,
-          fruit, 0, fruit.radius, { eyes: "closed" });
+        const wave = elapsed / 1000 * Math.PI * 3;
+        const dx = Math.sin(wave) * fruit.radius * 0.035;
+        const dy = Math.sin(wave * 0.5) * fruit.radius * 0.012;
+        drawFruitShape(ctx, wx + dx, wy + dy,
+          fruit, -Math.PI / 6, fruit.radius, { eyes: "closed" });
       } else {
-        drawSprite(ctx, getFruitSprite(this.currentIndex), wx, wy);
+        // 雲に持たれた待機フルーツは左に30°傾けて持たせる
+        const s = getFruitSprite(this.currentIndex);
+        ctx.save();
+        ctx.translate(wx, wy);
+        ctx.rotate(-Math.PI / 6);
+        ctx.drawImage(s.canvas, -s.ext, -s.ext, s.ext * 2, s.ext * 2);
+        ctx.restore();
       }
     }
 
@@ -452,19 +687,14 @@ class Game {
       const dx = (Math.random() * 2 - 1) * j;
       const dy = (Math.random() * 2 - 1) * j;
       drawFruitShape(ctx, body.position.x + dx, body.position.y + dy,
-        fruit, body.angle, fruit.radius, { eyes: "closed" });
+        fruit, body._visualAngle || 0, fruit.radius, { eyes: "closed" });
       return;
     }
-    // 通常:摩擦ゼロで物理回転しないので、見た目だけ「横に進んだ距離 ÷ 半径」で回す
-    // (車輪と同じ理屈=転がって見える)。いちご・ぶどうも横移動で一緒に転がる。
+    // 通常:描画専用角度で回す。重心位置と物理当たり判定は一切変化しない。
     const s = getFruitSprite(body.fruitIndex);
-    const radius = FRUITS[body.fruitIndex].radius;
-    if (body._lastX === undefined) { body._lastX = body.position.x; body._rollAngle = body.angle; }
-    body._rollAngle += (body.position.x - body._lastX) / radius;
-    body._lastX = body.position.x;
     ctx.save();
     ctx.translate(body.position.x, body.position.y);
-    ctx.rotate(body._rollAngle);
+    ctx.rotate(body._visualAngle || 0);
     ctx.drawImage(s.canvas, -s.ext, -s.ext, s.ext * 2, s.ext * 2);
     ctx.restore();
   }

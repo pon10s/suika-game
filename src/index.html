@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Yomogi&family=Hachi+Maru+Pop&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=23">
+  <link rel="stylesheet" href="css/style.css?v=34">
 </head>
 <body>
   <main class="game-wrap">
@@ -59,6 +59,23 @@
       <div id="shot-viewer" class="overlay hidden">
         <img id="shot-viewer-img" alt="クリア画面の証跡">
       </div>
+      <!-- リトライ確認ダイアログ(暗転+はい/いいえ) -->
+      <div id="retry-confirm" class="overlay hidden">
+        <div class="overlay-card retry-card">
+          <h2 class="retry-title">リトライしますか？</h2>
+          <div class="retry-btns">
+            <button id="retry-no" type="button" class="retry-btn">いいえ</button>
+            <button id="retry-yes" type="button" class="retry-btn retry-yes">はい</button>
+          </div>
+        </div>
+      </div>
+      <!-- リセット開始演出(カーテン+シャボン玉+Ready/GO) -->
+      <div id="reset-intro" class="intro hidden" aria-hidden="true">
+        <div class="curtain curtain-left"></div>
+        <div class="curtain curtain-right"></div>
+        <div id="intro-bubbles" class="intro-bubbles"></div>
+        <div id="intro-text" class="intro-text"></div>
+      </div>
     </div>
     <div class="btn-row">
       <button id="bgm-btn" class="ranking-btn sound-toggle" type="button" aria-label="BGM切り替え">
@@ -91,12 +108,13 @@
   </main>
 
   <script src="lib/matter.min.js"></script>
-  <script src="js/fruits.js?v=23"></script>
-  <script src="js/storage.js?v=23"></script>
-  <script src="js/config.js?v=23"></script>
-  <script src="js/ranking.js?v=23"></script>
-  <script src="js/audio.js?v=23"></script>
-  <script src="js/game.js?v=23"></script>
-  <script src="js/main.js?v=23"></script>
+  <script src="js/fruits.js?v=34"></script>
+  <script src="js/storage.js?v=34"></script>
+  <script src="js/config.js?v=34"></script>
+  <script src="js/ranking.js?v=34"></script>
+  <script src="js/audio.js?v=34"></script>
+  <script src="js/game.js?v=34"></script>
+  <script src="js/intro.js?v=34"></script>
+  <script src="js/main.js?v=34"></script>
 </body>
 </html>
