@@ -1,1 +1,12 @@
 .claude/
+
+# 開発用の資料はGitHubに公開しない(手元には残す)。
+# ゲーム動作に必要なのは src/ と .github/workflows/ だけ。
+/AGENTS.md
+/CLAUDE.md
+/README.md
+/CHANGELOG.md
+/REQUIREMENTS.md
+/docs/
+/supabase/
+/tests/
